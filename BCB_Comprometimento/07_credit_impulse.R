@@ -961,7 +961,7 @@ plot_impulso_pib12m
 htmlwidgets::saveWidget(plot_impulso_pib12m, "temp_plot.html")
 
 # 2. Capturar imagem a partir do HTML
-webshot("temp_plot.html", file = paste0(".\\Output\\plot_impulso_pib12m.png"), vwidth = 1600, vheight = 800)
+webshot("temp_plot.html", file = paste0(".\\Output\\Plots\\", chapter_section, "plot_impulso_pib12m.png"), vwidth = 1600, vheight = 800)
 
 
 

@@ -1,6 +1,6 @@
 {
     "id": "567FBA38",
-    "path": "~/Doutorado/Projeto de Tese/DADOS2023-09-30/ARTIGO/2024-07-15/Entrega_2026-02-03/BCB_Comprometimento/02_calculate_debt_service.R",
+    "path": "~/Doutorado/Projeto de Tese/TESE_Paim/BCB_Comprometimento/02_calculate_debt_service.R",
     "project_path": "02_calculate_debt_service.R",
     "type": "r_source",
     "hash": "1625308506",
@@ -13,7 +13,7 @@
         "source_window_id": "",
         "Source": "Source",
         "cursorPosition": "264,0",
-        "scrollLine": "232"
+        "scrollLine": "0"
     },
     "folds": "",
     "lastKnownWriteTime": 1774895106,

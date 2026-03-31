@@ -1,6 +1,6 @@
 {
     "id": "3A68B3DB",
-    "path": "~/Doutorado/Projeto de Tese/DADOS2023-09-30/ARTIGO/2024-07-15/Entrega_2026-02-03/BCB_Comprometimento/08_models_data_nova_categoria.R",
+    "path": "~/Doutorado/Projeto de Tese/TESE_Paim/BCB_Comprometimento/08_models_data_nova_categoria.R",
     "project_path": "08_models_data_nova_categoria.R",
     "type": "r_source",
     "hash": "3767001337",
@@ -14,7 +14,7 @@
         "source_window_id": "",
         "Source": "Source",
         "cursorPosition": "354,0",
-        "scrollLine": "323"
+        "scrollLine": "0"
     },
     "folds": "",
     "lastKnownWriteTime": 1774896116,
