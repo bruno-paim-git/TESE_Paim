@@ -77,7 +77,7 @@ complete_irf <- function(modalidade_selected, fonte_selected, modelo_selected, d
   
   message("IRF: Modelo: ", modelo_selected, " | Fonte: ", fonte_selected, " | Modalidade: ", modalidade_selected)
   ggsave(filename = paste0(".\\Output\\Plots\\chapter_4_1\\02_IRF_", modalidade_selected,"_", fonte_selected,"_", modelo_selected, ".svg"), 
-         plot = plot_complete_irf, width = 16, height = 8, dpi = 1000)
+         plot = plot_complete_irf, width = 16, height = 10, dpi = 1000)
   
 }
 
