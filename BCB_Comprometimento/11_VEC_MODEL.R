@@ -1,4 +1,4 @@
-date_file <- "2026-03-30"
+date_file <- "2026-04-10"
 df_data_model <-  readr::read_rds(file = paste0("./Output/df_data_model_",  date_file, ".rds")) 
 
 
@@ -6,18 +6,17 @@ df_data_model <-  readr::read_rds(file = paste0("./Output/df_data_model_",  date
 grid <- expand_grid(
   modalidade = c(
     "Aquisição de bens"  ,
-    "Cartão de Crédito",
+    "CC parcelado sem juros",
+    "CC parcelado",
+    "CC rotativo",
     "Cheque especial",
     "Consignado",
     "Crédito pessoal não consignado",
     "Imobiliário"
   ),
   fonte_dados = c("bru", "bcb"),
-  # fonte_dados = c("bru"),
-  
   # metodo_series = c("d_", "")
   metodo_series = c("")
-  
 )
 
 #### FUNÇÃO AUXILIAR PARA ESCOLHER R ####
@@ -60,19 +59,49 @@ VEC_model_function <- function(modalidade_selecionada, fonte_dados, metodo_serie
   
   cat("Rodando:", modalidade_selecionada, "| Fonte:", fonte_dados, "| Formato:", metodo_extenso, "\n")
   
+  
+  df_data <- df_data_model |>  
+    filter(modalidade_agregada ==
+             modalidade_selecionada
+    ) 
+  
+  tem_tx_juros <-   any(!is.na(df_data[["TX_JUROS"]])) &&
+    any(df_data[["TX_JUROS"]] > 0, na.rm = TRUE)
+  
+  
   # --- Preparação dos Dados ---
   df_data <- df_data_model |>  
     filter(modalidade_agregada == modalidade_selecionada) |>
     mutate(
       SELIC = .data[[paste0(metodo_series,"SELIC")]],
-      TX_JUROS = .data[[paste0(metodo_series,"TX_JUROS")]],
       PIB = .data[[paste0(metodo_series,"sa_log_PIB")]],
       CONCESSOES = .data[[paste0(metodo_series,"sa_log_concessoes_", fonte_dados)]],
-      PGTO = .data[[paste0(metodo_series,"sa_log_pgto_", fonte_dados)]]
+      PGTO = .data[[paste0(metodo_series,"sa_log_pgto_", fonte_dados)]],
+      TX_JUROS = if (tem_tx_juros) .data[["TX_JUROS"]] else NA_real_
     ) %>% ungroup() |> arrange(date) 
   
   # Definir ordem causal: Variáveis mais exógenas primeiro
-  ordem_vars <- c("SELIC", "TX_JUROS", "PIB", "CONCESSOES", "PGTO")
+  # MODELOS PARA O CC parcelado sem juros não podem incluir a tx de juros#
+  # Demais modalidades
+  # (date, SELIC, TX_JUROS, PIB, CONCESSOES, PGTO)
+  
+  vars_base <- c("SELIC", "PIB", "CONCESSOES", "PGTO")
+  
+  if (tem_tx_juros) {
+    vars_modelo <- c("TX_JUROS", vars_base)
+  } else {
+    vars_modelo <- vars_base
+  }
+  
+  df_data_modelo <- df_data |>
+    dplyr::select(all_of(c("date", vars_modelo))) |>
+    drop_na()
+  
+  if (tem_tx_juros) {
+    ordem_vars <- c("SELIC", "TX_JUROS", "PIB", "CONCESSOES", "PGTO")
+  } else {
+    ordem_vars <- c("SELIC", "PIB", "CONCESSOES", "PGTO")
+  }
   
   modelo <- as.data.frame(df_data)
   
@@ -133,8 +162,8 @@ VEC_model_function <- function(modalidade_selecionada, fonte_dados, metodo_serie
   # --- Geração de IRFs (Choque na SELIC) ---
  
   grid_irf <- expand.grid(confidence_intervals = c(0.84, 0.90, 0.95),
-                   var_impulse = c("SELIC", "TX_JUROS", "PIB", "CONCESSOES","PGTO"),
-                   var_response = c("SELIC", "TX_JUROS", "PIB", "CONCESSOES","PGTO"))
+                   var_impulse = ordem_vars,
+                   var_response = ordem_vars)
   
   vec_irf <- function(var_impulse, var_response, confidence_intervals)
     {vars::irf(vec_model, 

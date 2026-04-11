@@ -1,5 +1,5 @@
 
-date_file <- "2026-03-30" 
+date_file <- "2026-04-10" 
 
 ff_final <- readr::read_rds(file = paste0("./Output/ff_final_", date_file, ".rds"))
 dados_macro <-  readr::read_rds(file = paste0("./Output/dados_macro_",  date_file, ".rds"))

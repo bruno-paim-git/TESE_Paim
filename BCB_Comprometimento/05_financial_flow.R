@@ -1,7 +1,7 @@
 
 
 
-date_file <- "2026-03-30"
+date_file <- "2026-04-10"
 
 df_empilhado <- readr::read_rds(file = paste0("./Output/df_empilhado_", date_file, ".rds"))
 
@@ -239,9 +239,9 @@ modalidades_agregadas <- c(
   "Aquisição de veículos" = "Aquisição de bens",
   "Arrendamento mercantil de outros bens" = "Aquisição de bens",
   "Arrendamento mercantil de veículos" = "Aquisição de bens",
-  "Cartão de crédito parcelado sem juros"  = "Cartão Crédito",
-  "Cartão de crédito parcelado"  = "Cartão Crédito",
-  "Cartão de crédito rotativo"  = "Cartão Crédito",
+  "Cartão de crédito parcelado sem juros"  = "CC parcelado sem juros",
+  "Cartão de crédito parcelado"  = "CC parcelado",
+  "Cartão de crédito rotativo"  = "CC rotativo",
   "Cheque especial" = "Cheque especial",
   "Crédito pessoal consignado para aposentados e pensionistas do INSS" = "Consignado",
   "Crédito pessoal consignado para trabalhadores do setor privado" = "Consignado",

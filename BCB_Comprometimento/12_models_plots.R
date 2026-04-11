@@ -24,16 +24,25 @@ irf_plots_data <- rbind(irf_plots_data_VEC, irf_plots_data_VAR) |>
 # modelo_selected <- "VAR"
 
 ####COMPLETE IRF####
-
-irf_plots_complete <- expand.grid(
-  modalidade = 
-    unique(irf_plots_data$modalidade),
-  fonte = c("Estoque", "Contabil"),
-  modelo = c("VEC", "VAR")
-)
+irf_plots_complete <- irf_plots_data |> select(modalidade, fonte, modelo) |> unique()
+# 
+# irf_plots_complete <- expand.grid(
+#   modalidade = 
+#     unique(irf_plots_data$modalidade),
+#   fonte = c("Estoque", "Contabil"),
+#   modelo = c("VEC", "VAR")
+# )
 
 
 complete_irf <- function(modalidade_selected, fonte_selected, modelo_selected, data = irf_plots_data){
+  
+  
+  
+  if (modalidade_selected == "CC parcelado sem juros") {
+    ncol_plot <- 4
+  } else {
+    ncol_plot <- 5
+  }
   
   plot_complete_irf <- ggplot(irf_plots_data |> 
                                 filter(fonte == fonte_selected & 
@@ -68,7 +77,7 @@ complete_irf <- function(modalidade_selected, fonte_selected, modelo_selected, d
       ~ facet_label, 
       scales = "free_y",
       labeller = label_parsed,
-      ncol = 5 # ajuste o número de colunas para bater com sua imagem (ex: 5 variáveis de impulso)
+      ncol = ncol_plot # ajuste o número de colunas para bater com sua imagem (ex: 5 variáveis de impulso)
     ) +
     scale_x_continuous(breaks = seq(0, 12, 2))+  # Aumente o width para preencher o espaço
     theme_bw(base_size = 16) + # Tema de fundo branco
@@ -129,7 +138,7 @@ free_y_selected_irf_comparison_all <- function(plot_selected, data = irf_plots_d
       legend.position = "bottom",
       legend.title = element_blank(),
     )+
-    facet_wrap(~modalidade, ncol = 3, scales = "free_y")  +  # Atribui as cores às modalidades
+    facet_wrap(~modalidade, ncol = 4, scales = "free_y")  +  # Atribui as cores às modalidades
     scale_x_continuous(breaks = seq(0, 12, 2), limits =  c(0,11))+  # Aumente o width para preencher o espaço
     theme(strip.text = element_text(size = 12))  +
     scale_color_manual(values = c("Contabil" = "blue2", "Estoque" = "red3")) +
@@ -174,7 +183,7 @@ fixed_y_selected_irf_comparison_all <- function(plot_selected, data = irf_plots_
       legend.position = "bottom",
       legend.title = element_blank(),
     )+
-    facet_wrap(~modalidade, ncol = 3)  +  # Atribui as cores às modalidades
+    facet_wrap(~modalidade, ncol = 4)  +  # Atribui as cores às modalidades
     scale_x_continuous(breaks = seq(0, 12, 2), limits =  c(0,11))+  # Aumente o width para preencher o espaço
     theme(strip.text = element_text(size = 12))  +
     scale_color_manual(values = c("Contabil" = "blue2", "Estoque" = "red3")) +

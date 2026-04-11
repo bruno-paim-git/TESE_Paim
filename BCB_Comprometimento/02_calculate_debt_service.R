@@ -1,5 +1,5 @@
 
-date_file <- "2026-03-30" 
+date_file <- "2026-04-10" 
 
 bcb_pf_df <- readr::read_rds(file = paste0("./Output/bcb_pf_df_", date_file, ".rds"))
 
@@ -20,6 +20,7 @@ modalidades_padrao <- c(
   "Aquisição de veículos",
   "Arrendamento mercantil de outros bens",
   "Arrendamento mercantil de veículos",
+  "Cartão de crédito parcelado",
   "Crédito pessoal consignado para aposentados e pensionistas do INSS",
   "Crédito pessoal consignado para trabalhadores do setor privado",
   "Crédito pessoal consignado para trabalhadores do setor público",
@@ -104,8 +105,8 @@ cc_parcelado_sem_juros <- lista_resultados[["Cartão de crédito à vista"]] |>
 cc_rotativo <- lista_resultados[["Cartão de crédito rotativo"]] %>%
   mutate_if(is.character, ~ type.convert(.x, as.is = TRUE)) %>%
   mutate(
-    concessoes_bcb = 0,
-    concessoes_bru = 0,
+    concessoes_bcb = concessoes,
+    concessoes_bru = concessoes,
     saldo_bcb = saldo,
     saldo_bru = saldo,
     icc_am = ((((tx_juros / 100) + 1)^(1 / 12)) - 1) * 100,
@@ -115,18 +116,18 @@ cc_rotativo <- lista_resultados[["Cartão de crédito rotativo"]] %>%
     )
 
 
-cc_parcelado <- lista_resultados[["Cartão de crédito parcelado"]] %>%
-  mutate_if(is.character, ~ type.convert(.x, as.is = TRUE)) %>%
-  mutate(
-    concessoes_bcb = 0,
-    concessoes_bru = 0,
-    saldo_bcb = saldo,
-    saldo_bru = saldo,
-    icc_am = ((((icc_aa / 100) + 1)^(1 / 12)) - 1) * 100,
-    PMT = ((icc_am / 100) * saldo_bru) / (1 - (1 + icc_am / 100)^-(2 * prazo_cart - 1)),
-    AMORTIZACAO = saldo_bru / (2 * prazo_cart - 1),
-    JUROS = PMT - AMORTIZACAO
-  )
+# cc_parcelado <- lista_resultados[["Cartão de crédito parcelado"]] %>%
+#   mutate_if(is.character, ~ type.convert(.x, as.is = TRUE)) %>%
+#   mutate(
+#     concessoes_bcb = concessoes,
+#     concessoes_bru = concessoes,
+#     saldo_bcb = saldo,
+#     saldo_bru = saldo,
+#     icc_am = ((((icc_aa / 100) + 1)^(1 / 12)) - 1) * 100,
+#     PMT = ((icc_am / 100) * saldo_bru) / (1 - (1 + icc_am / 100)^-(2 * prazo_cart - 1)),
+#     AMORTIZACAO = saldo_bru / (2 * prazo_cart - 1),
+#     JUROS = PMT - AMORTIZACAO
+#   )
 
 #####MODALIDADE - CHEQUE ESPECIAL####
 
@@ -200,7 +201,7 @@ lista_completa <- c(lista_resultados_padrao,
                     lista_resultados_habitacional,
                     list("Cartão de crédito parcelado sem juros" = cc_parcelado_sem_juros ,
                          "Cartão de crédito rotativo" = cc_rotativo,
-                         "Cartão de crédito parcelado" = cc_parcelado,
+                         # "Cartão de crédito parcelado" = cc_parcelado,
                          "Cheque especial" = cheque_especial))
 
 # Usando imap para adicionar uma coluna com o nome de cada dataframe

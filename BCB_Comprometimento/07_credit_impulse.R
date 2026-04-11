@@ -1,4 +1,4 @@
-date_file <- "2026-03-30" 
+date_file <- "2026-04-10" 
 
 df_empilhado <- readr::read_rds(file = paste0("./Output/df_empilhado_", date_file, ".rds"))
 dados_macro <-  readr::read_rds(file = paste0("./Output/dados_macro_",  date_file, ".rds")) |> 
@@ -17,7 +17,9 @@ comp_modalidade_def <- list()
 
 modalidade_modelo <- c(          
   "Aquisição de bens",
-  "Cartão de Crédito",
+  "CC parcelado sem juros",
+  "CC parcelado",
+  "CC rotativo",
   "Cheque especial",
   "Consignado",
   "Crédito pessoal não consignado",
@@ -30,9 +32,9 @@ modalidades_agregadas <- c(
   "Aquisição de veículos" = "Aquisição de bens",
   "Arrendamento mercantil de outros bens" = "Aquisição de bens",
   "Arrendamento mercantil de veículos" = "Aquisição de bens",
-  "Cartão de crédito parcelado sem juros"  = "Cartão de Crédito",
-  "Cartão de crédito parcelado"  = "Cartão de Crédito",
-  "Cartão de crédito rotativo"  = "Cartão de Crédito",
+  "Cartão de crédito parcelado sem juros"  = "CC parcelado sem juros",
+  "Cartão de crédito parcelado"  = "CC parcelado",
+  "Cartão de crédito rotativo"  = "CC rotativo",
   "Cheque especial" = "Cheque especial",
   "Crédito pessoal consignado para aposentados e pensionistas do INSS" = "Consignado",
   "Crédito pessoal consignado para trabalhadores do setor privado" = "Consignado",
@@ -45,7 +47,9 @@ modalidades_agregadas <- c(
 
 cores_modalidades <- c(
   "Aquisição de bens" = "#004488",  # Azul
-  "Cartão de Crédito" = "#DDAA33",    # Laranja
+  "CC parcelado sem juros" = "#DDAA33",    # Laranja
+  "CC parcelado" = "#4477AA",                     # Azul Escuro Suave ou #EE6677 (Salmão)
+  "CC rotativo" = "#666666",
   "Cheque especial" = "#BB5566",     # Vermelho
   "Consignado" = "#66CCEE",  # Roxo
   "Crédito pessoal não consignado" = "#228833",  # Marrom

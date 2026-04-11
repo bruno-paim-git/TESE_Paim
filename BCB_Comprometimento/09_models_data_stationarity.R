@@ -1,4 +1,4 @@
-date_file <- "2026-03-30"
+date_file <- "2026-04-10"
 
 df_data_model <-  readr::read_rds(file = paste0("./Output/df_data_model_",  date_file, ".rds")) |> 
   select("date", "modalidade_agregada", 
@@ -91,9 +91,32 @@ resultado_testes <- df_data_model %>%
     
     modalidade <- unique(df_mod$modalidade_agregada)
     
+    # 🔑 checa se TX_JUROS tem informação
+    tem_tx_juros <- "TX_JUROS" %in% colnames(df_mod) &&
+      any(df_mod$TX_JUROS > 0, na.rm = TRUE)
+    
+    # 🔑 define variáveis válidas
+    vars_validas <- if (tem_tx_juros) {
+      variaveis
+    } else {
+      setdiff(variaveis, "TX_JUROS")
+    }
+    
     purrr::map_df(variaveis, function(var) {
       
-      serie <- log(df_mod[[var]])
+      serie_raw <- df_mod[[var]]
+      
+      # proteção contra log inválido
+      if (var == "TX_JUROS") {
+        serie_raw <- serie_raw[serie_raw > 0]
+      }
+      
+      if (length(serie_raw) == 0 || all(is.na(serie_raw))) {
+        return(NULL)
+      }
+      
+      
+      serie <- log(serie_raw)
       
       res <- get_stationarity_full(serie)
       
@@ -127,19 +150,19 @@ filter(diff %in% c(0, 1)) |>
          pp = paste0(round(pp_p,3), pp_sig))|> 
   select(-kpss_stat, -adf_stat, -adf_p, -adf_sig, -pp_p, -pp_sig) |> 
   pivot_wider(names_from = diff, values_from = c(adf, pp)) |>
-  filter(!(modalidade %in% c("Aquisição de bens", "Consignado", "Crédito pessoal não consignado", "Imobiliário") &
+  filter(!(modalidade %in% c("Aquisição de bens", "CC parcelado", "CC rotativo", "Consignado", "Crédito pessoal não consignado", "Imobiliário") &
            variavel == "sa_log_concessoes_bru"))
 
 
 tabela_final_adf_pp <- bind_rows(resultado_adf_pp_geral,resultado_adf_pp_modalidades) |> 
   mutate( variavel = case_when(
     variavel == "sa_log_PIB" ~ "PIB",
-    variavel ==                     "sa_log_concessoes_bru" & modalidade %in% c("Cartão de Crédito", "Cheque especial") ~ "Concessões (Estoque)",
-    variavel ==                     "sa_log_concessoes_bcb" & modalidade %in% c("Cartão de Crédito", "Cheque especial") ~ "Concessões (Contábil)",
-    variavel ==                   "sa_log_concessoes_bcb" ~ "Concessões",
-    variavel ==                   "sa_log_pgto_bru" ~ "Pagamento (Estoque)",
-    variavel ==                  "sa_log_pgto_bcb" ~ "Pagamento (Contábil)",
-    variavel ==                  "TX_JUROS" ~ "Taxa de Juros",
+    variavel == "sa_log_concessoes_bru" & modalidade %in% c("CC parcelado sem juros", "Cheque especial") ~ "Concessões (Estoque)",
+    variavel == "sa_log_concessoes_bcb" & modalidade %in% c("CC parcelado sem juros", "Cheque especial") ~ "Concessões (Contábil)",
+    variavel == "sa_log_concessoes_bcb" ~ "Concessões",
+    variavel == "sa_log_pgto_bru" ~ "Pagamento (Estoque)",
+    variavel == "sa_log_pgto_bcb" ~ "Pagamento (Contábil)",
+    variavel == "TX_JUROS" ~ "Taxa de Juros",
     TRUE ~ variavel
   )) 
 

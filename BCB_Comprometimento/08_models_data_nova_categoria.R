@@ -1,4 +1,4 @@
-date_file <- "2026-03-30"
+date_file <- "2026-04-10"
 dados_macro <-  readr::read_rds(file = paste0("./Output/dados_macro_",  date_file, ".rds")) |> 
   select(date,PIB,SELIC,  IPCA)
 
@@ -8,9 +8,9 @@ modalidades_agregadas <- c(
   "Aquisição de veículos" = "Aquisição de bens",
   "Arrendamento mercantil de outros bens" = "Aquisição de bens",
   "Arrendamento mercantil de veículos" = "Aquisição de bens",
-  "Cartão de crédito parcelado sem juros"  = "Cartão de Crédito",
-  "Cartão de crédito parcelado"  = "Cartão de Crédito",
-  "Cartão de crédito rotativo"  = "Cartão de Crédito",
+  "Cartão de crédito parcelado sem juros"  = "CC parcelado sem juros",
+  "Cartão de crédito parcelado"  = "CC parcelado",
+  "Cartão de crédito rotativo"  = "CC rotativo",
   "Cheque especial" = "Cheque especial",
   "Crédito pessoal consignado para aposentados e pensionistas do INSS" = "Consignado",
   "Crédito pessoal consignado para trabalhadores do setor privado" = "Consignado",
@@ -34,10 +34,6 @@ precos_de <- max(df_fluxo_financeiro$date)
 total <- df_fluxo_financeiro |>
   mutate(
     modalidade_agregada = coalesce(modalidades_agregadas[modalidade], "Outros"),
-
-    # definir ponderação condicional: para rotativo/parcelado não pondera
-    tx_juros = if_else(modalidade %in% c("Cartão de crédito parcelado sem juros"), 0, tx_juros),
-    peso_tx = if_else(modalidade %in% c("Cartão de crédito parcelado sem juros"), 0, saldo_bru)
   ) |>
   group_by(date, modalidade_agregada) |>
   summarise(
@@ -53,7 +49,7 @@ total <- df_fluxo_financeiro |>
     ),
     
     # -------- MÉDIAS PONDERADAS CONDICIONAIS --------
-    TX_JUROS = sum(tx_juros * peso_tx, na.rm = TRUE) / sum(peso_tx, na.rm = TRUE),
+    TX_JUROS = sum(tx_juros * concessoes_bru, na.rm = TRUE) / sum(concessoes_bru, na.rm = TRUE),
     
     .groups = "drop"
   ) |>
@@ -262,7 +258,7 @@ plot_pagamentos_sa_log <- ggplot(df_data_model |> filter(date >= "2015-01-01") |
 
 plot_pagamentos_sa_log
 
-ggsave(filename = paste0(f_chapter, "\\plot_pagamentos_sa_log.png"), 
+ggsave(filename = paste0(f_chapter, "\\plot_pagamentos_sa_log.svg"), 
        plot = plot_pagamentos_sa_log, 
        width = 12, height = 8, dpi = 1000)
 
