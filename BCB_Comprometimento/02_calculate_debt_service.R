@@ -1,17 +1,53 @@
+# OBJETIVO:
+# Calcular Juros e Amortização para cada modalidade
+# exportar dados de saldo, concessões, taxa de juros, pagamentos ( amortização e juros) por modalidade
+# as séries "_bcb" referem-se às originais
+# as séries "_bru" referem-se à aplicação da metodologia proposta
 
-date_file <- "2026-04-10" 
+#Para agregar as variáveis semelhantes:
+#no cálculo do ICC ponderamos pelo saldo da carteira
+#no cálculo dos juros ponderamos pelas concessões, diferente do BCB que pondera também pelo saldo
+#optamos desta forma, pois é justamente por causa do efeito diferente sobre o ICC e sobre os Juros
+#que as concessões gradualmente impactam no saldo
+
+#define data do arquivo base
+date_file <- "2026-09-09" 
+{
+####BIBLIOTECA####
+library(tidyverse)
+library(lubridate)
+library(httr)
+library(jsonlite)
+library(vars)
+library(svars)
+library(TTR)
+library(tsibble)
+library(conflicted)
+library(plotly)
+library(seasonal)
+library(webshot)
+library(RCurl)
+library(slider)
+library(patchwork)
+library(tseries)
+library(urca)
+
+options(scipen = 999)
+
+conflict_prefer("layout", "plotly")
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("lag", "dplyr")
+
+source("./function_export_plot.R")
+
+}
 
 bcb_pf_df <- readr::read_rds(file = paste0("./Output/bcb_pf_df_", date_file, ".rds"))
 
 lista_resultados <- split(bcb_pf_df, bcb_pf_df$modalidade)
 
-
 df_cartao_de_credito <- readr::read_rds(file = paste0("./Output/df_cartao_de_credito_", date_file, ".rds"))
-# Criando um vetor com as modalidades escolhidas
-
-####FUNÇÃO PARA BUSCAR NO BCB - SEM PACOTE####
-
-####CÁLCULO DO PMT, JUROS, AMORTIZAÇÃO POR MODALIDADE####
 
 #####MODALIDADES - PADRÃO#####
 #Cálculo Comprometimento padrão
@@ -115,20 +151,6 @@ cc_rotativo <- lista_resultados[["Cartão de crédito rotativo"]] %>%
     PMT = AMORTIZACAO + JUROS
     )
 
-
-# cc_parcelado <- lista_resultados[["Cartão de crédito parcelado"]] %>%
-#   mutate_if(is.character, ~ type.convert(.x, as.is = TRUE)) %>%
-#   mutate(
-#     concessoes_bcb = concessoes,
-#     concessoes_bru = concessoes,
-#     saldo_bcb = saldo,
-#     saldo_bru = saldo,
-#     icc_am = ((((icc_aa / 100) + 1)^(1 / 12)) - 1) * 100,
-#     PMT = ((icc_am / 100) * saldo_bru) / (1 - (1 + icc_am / 100)^-(2 * prazo_cart - 1)),
-#     AMORTIZACAO = saldo_bru / (2 * prazo_cart - 1),
-#     JUROS = PMT - AMORTIZACAO
-#   )
-
 #####MODALIDADE - CHEQUE ESPECIAL####
 
 ### A seguinte alteração não foi realizada, pois a taxa sobre o limite não utilizada não foi aplicada pelas instituições financeiras.
@@ -138,11 +160,13 @@ cc_rotativo <- lista_resultados[["Cartão de crédito rotativo"]] %>%
 #chegou-se ao valor aproximado de 3p.p. pois a taxa de utilização da modalidade é cerca de 8%
 #como só temos as concessões de quem efetivamente utiliza, dividiu-se 0,25 por 0,08, chegando a 3,125
 
-#Utilizou-se o prazo médio de 19 para cálculo da amortização
-
+#Para cálculo da amortização, dada a característica de alta recorrência vis-à-vis duração inferior a um mês, 
+#utilizou-se o prazo médio de 12 meses para amortização, 
+#com base na distribuição de frequência de uso do Cheque Especial (BCB, 2019, p.17). 
 
 cheque_especial <- lista_resultados[["Cheque especial"]] %>%
   mutate_if(is.character, ~ type.convert(.x, as.is = TRUE)) %>%
+  arrange(date) |> 
   mutate(
     concessoes_bcb = concessoes,
     # concessoes_bru = concessoes,
@@ -201,7 +225,6 @@ lista_completa <- c(lista_resultados_padrao,
                     lista_resultados_habitacional,
                     list("Cartão de crédito parcelado sem juros" = cc_parcelado_sem_juros ,
                          "Cartão de crédito rotativo" = cc_rotativo,
-                         # "Cartão de crédito parcelado" = cc_parcelado,
                          "Cheque especial" = cheque_especial))
 
 # Usando imap para adicionar uma coluna com o nome de cada dataframe
@@ -235,25 +258,26 @@ unique(df_empilhado$modalidade)
 tabela_10 <- df_empilhado |> 
   filter(modalidade %in% modalidades_selecionadas) |> 
   mutate(ano = year(date)) |> 
-  filter(ano %in% c(2013, 2025)) |>  # Note: sem aspas
+  filter(ano %in% c(2013, 2025)) |>  
   group_by(ano, modalidade) |> 
   summarise(
     saldo_total = sum(saldo, na.rm = TRUE),
     concessoes_total = sum(concessoes, na.rm = TRUE),
     .groups = "drop"
   ) |> 
-  group_by(ano) |>  # Agrupa por ano para calcular porcentagens
+  group_by(ano) |> 
   mutate(
-    perc_saldo = saldo_total / sum(saldo_total) * 100,
-    perc_concessoes = concessoes_total / sum(concessoes_total) * 100
+    perc_saldo = sprintf("%.1f", round(saldo_total / sum(saldo_total) * 100, 1)),
+    perc_concessoes = sprintf("%.1f", round(concessoes_total / sum(concessoes_total) * 100, 1))
   ) |> 
   ungroup() |>
   select(-saldo_total, -concessoes_total) |>
   pivot_wider(names_from = ano, values_from = c(perc_saldo, perc_concessoes))
 
+
 tabela_10
 readr::write_excel_csv2( tabela_10,
-                         file = paste0("./Output/tabela_10.csv"))
+                         file = paste0("./Output/tabela_10_", Sys.Date(),".csv"))
 
 #####save_the_data####
 

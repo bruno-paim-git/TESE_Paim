@@ -1,5 +1,38 @@
+# OBJETIVO:
+# Comparar os resultados obtidos para o cálculo do Fluxo Financeiro com os dados do BCB
+# exportar gráfico comparando os resultados obtidos
 
-date_file <- "2026-04-10" 
+#define data do arquivo base
+date_file <- "2026-09-09" 
+{
+  ####BIBLIOTECA####
+  library(tidyverse)
+  library(lubridate)
+  library(httr)
+  library(jsonlite)
+  library(vars)
+  library(svars)
+  library(TTR)
+  library(tsibble)
+  library(conflicted)
+  library(plotly)
+  library(seasonal)
+  library(webshot)
+  library(RCurl)
+  library(slider)
+  library(patchwork)
+  library(tseries)
+  library(urca)
+  
+  options(scipen = 999)
+  
+  conflict_prefer("layout", "plotly")
+  conflict_prefer("select", "dplyr")
+  conflict_prefer("filter", "dplyr")
+  conflict_prefer("lag", "dplyr")
+  
+  source("./function_export_plot.R")
+}
 
 ff_final <- readr::read_rds(file = paste0("./Output/ff_final_", date_file, ".rds"))
 dados_macro <-  readr::read_rds(file = paste0("./Output/dados_macro_",  date_file, ".rds"))
@@ -134,8 +167,8 @@ dispersão_total
 ff_comparison_df <- ff_df |> select(-mm_sa_ff_bru) |> mutate(dif_pp = (ff_bcb_rpm - mm_sa_ff_bcb))
 
 fluxo_financeiro_comparing <-  plot_ly(ff_comparison_df, x = ~date) %>%
-  add_bars(y = ~dif_pp, name = "Diferença (p.p.)",  
-           marker = list(color = "grey", opacity = 0.5), yaxis = "y2") %>%
+  add_bars(y = ~dif_pp, name = "Diferença",  
+           marker = list(color = "grey", opacity = 0.5)) %>%
   add_lines(y = ~ff_bcb_rpm, name = "Fluxo Financeiro (BCB)", 
             line = list(color = "red"), yaxis = "y") %>%
   add_lines(y = ~mm_sa_ff_bcb, name = "Elaboração Própria", 
@@ -152,12 +185,15 @@ fluxo_financeiro_comparing <-  plot_ly(ff_comparison_df, x = ~date) %>%
     margin = list(r = 50)  # Aumenta a margem direita# Centraliza a legenda abaixo
   )
 
- # 1. Salvar o gráfico como HTML temporário
- htmlwidgets::saveWidget(fluxo_financeiro_comparing, "temp_plot.html")
- 
- # 2. Capturar imagem a partir do HTML
- webshot("temp_plot.html", file = paste0(".\\Output\\Plots\\", chapter_section, "fluxo_financeiro_comparing.png"), vwidth = 1600, vheight = 800)
- 
+fluxo_financeiro_comparing
+
+exportar_plotly_png(fluxo_financeiro_comparing, 
+                    file = paste0(".\\Output\\Plots\\", chapter_section, "fluxo_financeiro_comparing.png"), 
+                    width = 1600, 
+                    height = 800)
+
+
+
 modalidades_validas <- c(
   "Aquisição de outros bens",
   "Aquisição de veículos",

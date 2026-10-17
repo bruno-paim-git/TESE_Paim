@@ -16,68 +16,99 @@ library(tidyverse)
 library(ggraph)
 
 #### EQUAÇÕES ####
-#Foram adaptadas algumas equações com base em DOMENICO et al. (2024)
-#uma das adaptações foi fazer o consumo e o investimento correntes se formar a partir da renda defasada
+#A adaptação do artigo original passa pela tentativa de tornar um modelo em tempo contínuo em outro de tempo discreto.
+#O original estabelece o período de transição ao estado estacionário a partir das equações diferenciais.
+#Esta adaptação transforma as equações diferenciais em discretas, estabelecendo um fluxo entre os valores absolutos de cada período.
+#Neste sentido, algumas decisões quanto a quais variáveis são defasadas exigiram certo nível de dedução.
+#Não por outro motivo, os resultados obtidos, apesar de se aproximarem aos apresentados pelo artigo original, não são idênticos.
+
 
 #####SISTEMA DE EQUAÇÕES - BUCCHIANICO 2024####
 eqs_bucchianico2024 <- sfcr_set(
   
   #####TRABALHADORES####
-  Ciw ~ cw * Ydw[-1],  #ATENÇÃO
-  # Ciw ~ cw * Ydw,  #ATENÇÃO
+  #CONSUMO INDUZIDO A PARTIR DA RENDA
+  Ciw ~ cw * Ydw,
+  
+  #RENDA DOS SALÁRIOS
   W ~ w*Y,
-  Ydw ~ W  - (r+i)*Lw[-1],         
-  Bw ~ Bw[-1] + (phi0 - phi1*i)*Bw[-1],
-  Lw ~ Lw[-1] + Bw - r*Lw[-1],
+  
+  #RENDA DISPONÍVEL DOS TRABALHADORES
+  Ydw ~ W  - (r+i)*Lw[-1],
+  
+  #CONSUMO AUTÔNOMO
+  Bw ~ (1+gB)*Bw[-1],
+  gB ~ phi0 - phi1*i,
+  
+  #SALDO  DA DÍVIDA CRÉDITO AUTÔNOMO
+  Lw ~ Bw + (1- r)*Lw[-1],
+  
+  #CONSUMO TOTAL DOS TRABALHADORES
   Cw ~ Bw + Ciw,
-  Zw ~ Bw + (cr*i - cw*(i+r))*Lw[-1], #equação está errada no original
   
-  SAVw ~ Ydw - Cw , 
-  Dw ~ Dw[-1] + SAVw + Lw - Lw[-1] ,
+  #POUPANÇA DOS TRABALHADORES
+  SAVw ~ Ydw - Cw, 
   
+  #DEPÓSITOS DOS TRABALHADORES
+  Dw ~ Dw[-1] + SAVw + Bw,
   
-  ######CAPITALISTAS####
-  Cr ~ cr*Ydr[-1],      #ATENÇÃO
-  # Cr ~ cr*Ydr,      #ATENÇÃO
-  Ydr ~ FD + Fb,
-  Fb ~ i*Lw[-1],
+  ######EMPRESAS E BANCOS####
+  #INVESTIMENTO
+  I ~ h*Y,   
+  
+  #PROPENSÃO MARGINAL A INVESTIR
+  h ~ h[-1] + h[-1]*gamma*(u - un),
+  
+  #ESTOQUE DE CAPITAL
+  K ~ K[-1] + I - delta*K[-1],
+  
+  # LUCRO DAS EMPRESAS 
   FT ~ pi*Y,
+  
+  #LUCRO DOS BANCOS
+  Fb ~ i*Lw[-1],
+  
+  #LUCRO RETIDO DAS EMPRESAS
+  FU ~ (1-ro)*FT,   #COMO ro = 1, FU = 0
+  
+  #LUCRO DISTRIBUÍDOS DAS EMPRESAS
   FD ~ ro*FT,
   
+  #AÇÕES                                                            
+  E ~ I + E[-1] - FU,
   
-  SAVr ~ Ydr - Cr - (E - E[-1]),
-  Dr ~ Dr[-1] + SAVr,
+  ######CAPITALISTAS####
+  #RENDA DISPONÍVEL PARA OS RENTISTAS
+  Ydr ~ Fb + FD,
   
+  #CONSUMO DOS RENTISTAS
+  Cr ~ cr*Ydr,
   
-  ######EMPRESAS####
-  I ~ h*Y[-1],   #ATENÇÃO
-  # I ~ h*Y,   #ATENÇÃO
-  h ~ h[-1] + h[-1]*gamma*(u[-1] - un),   #ATENÇÃO
-  # h ~ h[-1] + h[-1]*gamma*(u - un),   #ATENÇÃO
+  #POUPANÇA DOS RENTISTAS
+  SAVr ~ Ydr - Cr,
   
-  K ~ K[-1] + I - delta*K[-1],
-  FU ~ (1-ro)*FT,
-  E ~ I + E[-1],
+  #DEPÓSITOS DOS RENTISCAS
+  Dr ~ Dr[-1] + SAVr - (E - E[-1]),  
   
   ######ATIVIDADE####
-
+  #UTILIZAÇÃO DA CAPACIDADE
   u ~ Y/Yfc,
-  Yfc ~ K/v,
+  
+  #PRODUTO DE PLENA CAPACIDADE
+  Yfc ~ K[-1]/v,
   
   ######FECHAMENTO####
   C ~ Cw + Cr,
   Y ~ C + I,
   D ~ Dw + Dr,
-  SAV ~ SAVw + SAVr,
-  
-  # gZw ~ Zw/Zw[-1] -1,
+  SAV ~ SAVw + SAVr,           
   
   # #FOR BALANCE-SHEET MATRIX
   Vw ~ Dw - Lw,
-  Vr ~ Dr + E, #alterado
+  Vr ~ Dr + E,
+  Vf ~ K - E,
   
   #FOR TRANSACTION-FLOW MATRIX
-  d ~ Bw/Lw
-  
+  d ~ Bw/Lw[-1]
 )
 

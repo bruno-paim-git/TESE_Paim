@@ -1,5 +1,40 @@
+# OBJETIVO:
+# Comparar os resultados obtidos para o cálculo do serviço da dívida por modalidade com a série do BCB
+# exportar gráficos comparando os resultados obtidos
 
-date_file <- "2026-04-10" 
+#define data do arquivo base
+date_file <- "2026-09-09" 
+{
+  ####BIBLIOTECA####
+  library(tidyverse)
+  library(lubridate)
+  library(httr)
+  library(jsonlite)
+  library(vars)
+  library(svars)
+  library(TTR)
+  library(tsibble)
+  library(conflicted)
+  library(plotly)
+  library(seasonal)
+  library(webshot)
+  library(RCurl)
+  library(slider)
+  library(patchwork)
+  library(tseries)
+  library(urca)
+  
+  options(scipen = 999)
+  
+  conflict_prefer("layout", "plotly")
+  conflict_prefer("select", "dplyr")
+  conflict_prefer("filter", "dplyr")
+  conflict_prefer("lag", "dplyr")
+  
+  source("./function_export_plot.R")
+  
+}
+
 
 df_empilhado <- readr::read_rds(file = paste0("./Output/df_empilhado_", date_file, ".rds"))
 dados_macro <-  readr::read_rds(file = paste0("./Output/dados_macro_",  date_file, ".rds"))
@@ -9,23 +44,6 @@ df_BCB_comprometimento <-  readr::read_rds(file = paste0("./Output/df_BCB_compro
 chapter_section <- "chapter_3_2\\"
 
 #Agrega Modalidades
-modalidades_agregadas <- c(
-  "Aquisição de outros bens" = "Aquisição de bens",
-  "Aquisição de veículos" = "Aquisição de bens",
-  "Arrendamento mercantil de outros bens" = "Aquisição de bens",
-  "Arrendamento mercantil de veículos" = "Aquisição de bens",
-  "Cartão de crédito parcelado sem juros"  = "CC parcelado sem juros",
-  "Cartão de crédito parcelado"  = "CC parcelado",
-  "Cartão de crédito rotativo"  = "CC rotativo",
-  "Cheque especial" = "Cheque especial",
-  "Crédito pessoal consignado para aposentados e pensionistas do INSS" = "Consignado",
-  "Crédito pessoal consignado para trabalhadores do setor privado" = "Consignado",
-  "Crédito pessoal consignado para trabalhadores do setor público" = "Consignado",
-  "Crédito pessoal não consignado" = "Crédito pessoal não consignado",
-  "Crédito pessoal não consignado vinculado à composição de dívidas" = "Crédito pessoal não consignado",
-  "Financiamento imobiliário com taxas de mercado" = "Imobiliário",
-  "Financiamento imobiliário com taxas reguladas" = "Imobiliário"
-)
 
 modalidades_selecionadas <- c(
   "Aquisição de outros bens",
@@ -45,11 +63,6 @@ modalidades_selecionadas <- c(
   "Financiamento imobiliário com taxas reguladas"
 )
 
-#Para agregar as variáveis semelhantes:
-#no cálculo do ICC ponderamos pelo saldo da carteira
-#no cálculo dos juros ponderamos pelas concessões, diferente do BCB que pondera também pelo saldo
-#optamos desta forma, pois é justamente por causa do efeito diferente sobre o ICC e sobre os Juros
-#que as concessões gradualmente impactam no saldo
 
 df_empilhado <- df_empilhado |>
   filter(modalidade %in% modalidades_selecionadas)
@@ -122,10 +135,13 @@ comprometimento_total <- plot_ly(COMPROMETIMENTO_BCB, x = ~date) %>%
 
 comprometimento_total
 
-# 1. Salvar o gráfico como HTML temporário
-htmlwidgets::saveWidget(comprometimento_total, "temp_plot.html", selfcontained = TRUE)
 
-webshot("temp_plot.html", file = paste0(".\\Output\\Plots\\", chapter_section, "comprometimento_total.png"), vwidth = 1600, vheight = 800)
+exportar_plotly_png(comprometimento_total, 
+                    file = paste0(".\\Output\\Plots\\", chapter_section, "comprometimento_total.png"), 
+                    width = 1600, 
+                    height = 800)
+
+
 
 #JUROS
 comprometimento_juros <- plot_ly(COMPROMETIMENTO_BCB, x = ~date) %>%
@@ -149,11 +165,11 @@ comprometimento_juros <- plot_ly(COMPROMETIMENTO_BCB, x = ~date) %>%
 
 comprometimento_juros
 
-# 1. Salvar o gráfico como HTML temporário
-htmlwidgets::saveWidget(comprometimento_juros, "temp_plot.html")
+exportar_plotly_png(comprometimento_juros, 
+                    file = paste0(".\\Output\\Plots\\", chapter_section, "comprometimento_juros.png"), 
+                    width = 1600, 
+                    height = 800)
 
-# 2. Capturar imagem a partir do HTML
-webshot("temp_plot.html", file = paste0(".\\Output\\Plots\\", chapter_section, "comprometimento_juros.png"), vwidth = 1600, vheight = 800)
 
 #AMORTIZAÇÃO
 comprometimento_amortizacao <- plot_ly(COMPROMETIMENTO_BCB, x = ~date) %>%
@@ -177,11 +193,11 @@ comprometimento_amortizacao <- plot_ly(COMPROMETIMENTO_BCB, x = ~date) %>%
 
 comprometimento_amortizacao
 
-# 1. Salvar o gráfico como HTML temporário
-htmlwidgets::saveWidget(comprometimento_amortizacao, "temp_plot.html")
+exportar_plotly_png(comprometimento_amortizacao, 
+                    file = paste0(".\\Output\\Plots\\", chapter_section, "comprometimento_amortizacao.png"), 
+                    width = 1600, 
+                    height = 800)
 
-# 2. Capturar imagem a partir do HTML
-webshot("temp_plot.html", file = paste0(".\\Output\\Plots\\", chapter_section, "comprometimento_amortizacao.png"), vwidth = 1600, vheight = 800)
 
 ######GRÁFICOS DISPERSÃO#####
 #TOTAL
@@ -192,7 +208,7 @@ lim_max <- max(COMPROMETIMENTO_BCB$BCB_comprometimento_total,
                COMPROMETIMENTO_BCB$comprometimento_total, na.rm = TRUE)
 
 # Criar gráfico com linha 45º
-dispersão_total <- plot_ly(COMPROMETIMENTO_BCB, 
+dispersao_total <- plot_ly(COMPROMETIMENTO_BCB, 
                            x = ~BCB_comprometimento_total, 
                            y = ~comprometimento_total, 
                            type = "scatter", mode = "markers",
@@ -213,13 +229,12 @@ dispersão_total <- plot_ly(COMPROMETIMENTO_BCB,
     legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.2, font = list(size = 18))
   )
 
-dispersão_total
+dispersao_total
 
-# 1. Salvar o gráfico como HTML temporário
-htmlwidgets::saveWidget(dispersão_total, "temp_plot.html")
-
-# 2. Capturar imagem a partir do HTML
-webshot("temp_plot.html", file = paste0(".\\Output\\Plots\\", chapter_section, "dispersão_total.png"), vwidth = 1600, vheight = 800)
+exportar_plotly_png(dispersao_total, 
+                    file = paste0(".\\Output\\Plots\\", chapter_section, "dispersao_total.png"), 
+                    width = 1600, 
+                    height = 800)
 
 
 #JUROS

@@ -1,6 +1,42 @@
-date_file <- "2026-04-10"
-df_data_model <-  readr::read_rds(file = paste0("./Output/df_data_model_",  date_file, ".rds")) 
+# OBJETIVO:
+# Aplica modelo VEC às séries calculados segundo abordagem Contábil e de Estoques
+# Exporta resultados para serem comparados com modelo VAR posteriormente
 
+#define data do arquivo base
+date_file <- "2026-09-09"
+
+{
+  ####BIBLIOTECA####
+  library(tidyverse)
+  library(lubridate)
+  library(httr)
+  library(jsonlite)
+  library(vars)
+  library(svars)
+  library(TTR)
+  library(tsibble)
+  library(conflicted)
+  library(plotly)
+  library(seasonal)
+  library(webshot)
+  library(RCurl)
+  library(slider)
+  library(patchwork)
+  library(tseries)
+  library(urca)
+  
+  options(scipen = 999)
+  
+  conflict_prefer("layout", "plotly")
+  conflict_prefer("select", "dplyr")
+  conflict_prefer("filter", "dplyr")
+  conflict_prefer("lag", "dplyr")
+  
+  source("./function_export_plot.R")
+  
+}
+
+df_data_model <-  readr::read_rds(file = paste0("./Output/df_data_model_",  date_file, ".rds")) 
 
 #### LISTA MODALIDADES ####
 grid <- expand_grid(
@@ -17,7 +53,14 @@ grid <- expand_grid(
   fonte_dados = c("bru", "bcb"),
   # metodo_series = c("d_", "")
   metodo_series = c("")
+  # metodo_series = c("d_")
 )
+
+#  para  teste
+# # # 
+# modalidade_selecionada <- "CC parcelado sem juros"
+# fonte_dados <- "bcb"
+# metodo_series <- ""
 
 #### FUNÇÃO AUXILIAR PARA ESCOLHER R ####
 choose_r <- function(johansen_test, signif = 0.05) {
@@ -47,18 +90,45 @@ choose_r <- function(johansen_test, signif = 0.05) {
   return(r)
 }
 
-# 
-# modalidade_selecionada <- "Consignado"
-# fonte_dados <- "bcb"
-# metodo_series <- ""
+# Função para extrair os módulos dos autovalores (raízes) diretamente do objeto vec2var
+get_vec_roots <- function(vec_obj) {
+  # K: número de variáveis, p: número de lags em nível
+  K <- vec_obj$K
+  p <- vec_obj$p
+  
+  # Junta as matrizes A_1, A_2, ..., A_p em um único bloco horizontal
+  A_mats <- do.call(cbind, vec_obj$A) 
+  
+  if (p == 1) {
+    companion <- A_mats
+  } else {
+    # Monta a Companion Matrix para o VAR(p) equivalente do VEC
+    identity_block <- diag(K * (p - 1))
+    zero_block <- matrix(0, nrow = K * (p - 1), ncol = K)
+    companion <- rbind(
+      A_mats,
+      cbind(identity_block, zero_block)
+    )
+  }
+  
+  # Calcula os módulos dos autovalores da matriz companheira
+  eigen_vals <- eigen(companion)$values
+  mod_roots <- Mod(eigen_vals)
+  
+  return(sort(mod_roots, decreasing = TRUE))
+}
 
 
 VEC_model_function <- function(modalidade_selecionada, fonte_dados, metodo_series) {
   
   metodo_extenso <- dplyr::if_else(metodo_series == "d_", "diff", "nivel")
   
-  cat("Rodando:", modalidade_selecionada, "| Fonte:", fonte_dados, "| Formato:", metodo_extenso, "\n")
-  
+  cat(
+    "Rodando:", modalidade_selecionada,
+    "\nFonte dos Dados:", fonte_dados,
+    "\nFormato:", metodo_extenso,
+    "\n\n"
+  )  
   
   df_data <- df_data_model |>  
     filter(modalidade_agregada ==
@@ -78,9 +148,11 @@ VEC_model_function <- function(modalidade_selecionada, fonte_dados, metodo_serie
       CONCESSOES = .data[[paste0(metodo_series,"sa_log_concessoes_", fonte_dados)]],
       PGTO = .data[[paste0(metodo_series,"sa_log_pgto_", fonte_dados)]],
       TX_JUROS = if (tem_tx_juros) .data[["TX_JUROS"]] else NA_real_
-    ) %>% ungroup() |> arrange(date) 
+    ) |> 
+    ungroup() |> 
+    arrange(date) 
   
-  # Definir ordem causal: Variáveis mais exógenas primeiro
+  ##### SELECIONA VARIÁVEIS DOS MODELOS####
   # MODELOS PARA O CC parcelado sem juros não podem incluir a tx de juros#
   # Demais modalidades
   # (date, SELIC, TX_JUROS, PIB, CONCESSOES, PGTO)
@@ -97,22 +169,55 @@ VEC_model_function <- function(modalidade_selecionada, fonte_dados, metodo_serie
     dplyr::select(all_of(c("date", vars_modelo))) |>
     drop_na()
   
+  # ORDENAMENTO DA TESE
   if (tem_tx_juros) {
     ordem_vars <- c("SELIC", "TX_JUROS", "PIB", "CONCESSOES", "PGTO")
   } else {
     ordem_vars <- c("SELIC", "PIB", "CONCESSOES", "PGTO")
   }
   
-  modelo <- as.data.frame(df_data)
+  # #TESTE A MUDANÇA ORDENAMENTO VARIÁVEIS
+  # if (tem_tx_juros) {
+  #   ordem_vars <- c("TX_JUROS", "PIB", "CONCESSOES", "PGTO","SELIC")
+  # } else {
+  #   ordem_vars <- c("PIB", "CONCESSOES", "PGTO", "SELIC")
+  # }
+  #TESTE B MUDANÇA ORDENAMENTO VARIÁVEIS
+  # if (tem_tx_juros) {
+  #   ordem_vars <- c("PIB", "CONCESSOES", "PGTO", "SELIC", "TX_JUROS")
+  # } else {
+  #   ordem_vars <- c("PIB", "CONCESSOES", "PGTO", "SELIC")
+  # }
   
-  ts_data_modelo <- modelo |> 
-    select(all_of(ordem_vars)) |>  # agora seleciona apenas as variáveis numéricas
-    as.matrix() |> 
-    ts(start = c(year(min(modelo$date)), month(min(modelo$date))), 
-       frequency = 12)
+  ys <- paste0("y", seq_along(ordem_vars))
+  
+  # cria um dataframe com todas as combinações possíveis (incluindo ida e volta)
+  n_vars <- length(ordem_vars)
+  
+  grid_completo <- expand.grid(
+    origem = 1:n_vars,
+    destino = 1:n_vars
+  )
+  
+  variable_groups <- pmap(grid_completo, function(origem, destino) {
+    c(ordem_vars[origem], ordem_vars[destino], ys[origem], ys[destino])
+  })
   
   
-  # --- Seleção de Lag e Teste de Johansen ---
+  # Definir o menor ano e o menor mês corretamente
+  min_year <- min(year(df_data_modelo$date))
+  min_month <- min(month(df_data_modelo$date[year(df_data_modelo$date) == min_year]))
+  
+  # Transforma em TS
+  ts_data_modelo <- df_data_modelo |> 
+    select(all_of(ordem_vars), everything()) |> 
+    as.data.frame() |> 
+    select(-date) |> 
+    ts(start = c(min_year,min_month), frequency = 12)
+
+  svars_b_lenght <- round(0.1*nrow(ts_data_modelo),0)
+  #b.length: In applied work, however, a typical block length is about 10% of the sample size.
+    # --- Seleção de Lag e Teste de Johansen ---
   # K é o lag do VAR em nível. O VECM usará K-1.
   VARselect_out <- vars::VARselect(ts_data_modelo, lag.max = 10, type = "const")
   # k_lag <- as.numeric(VARselect_out$selection["AIC(n)"])
@@ -129,14 +234,8 @@ VEC_model_function <- function(modalidade_selecionada, fonte_dados, metodo_serie
   # Regra de decisão
   k_lag <- min(top_lags)
   
-  # k_lag <- if (length(top_lags) == 1) {
-  #   min(top_lags)
-  # } else {
-  #   as.numeric(VARselect_out$selection["AIC(n)"])
-  # }
- 
   # Teste de Johansen (ecdet = 'const' para incluir intercepto na relação de cointegração)
-  johansen_test <- urca::ca.jo(ts_data_modelo, type = "trace", ecdet = c("const"), K = k_lag, spec = "longrun")
+  johansen_test <- urca::ca.jo(ts_data_modelo, type = "trace", ecdet = c("const"), K = k_lag , spec = "longrun")
   r_rank <- choose_r(johansen_test, signif = 0.05)
   
   # summary(johansen_test)
@@ -147,82 +246,150 @@ VEC_model_function <- function(modalidade_selecionada, fonte_dados, metodo_serie
   # --- Estimação do Modelo ---
   
   vec_model <- vars::vec2var(johansen_test, r = r_rank)
-
-    # summary(vec_model)
+  vec_model_chol <- id.chol(vec_model)
   
-  # serial_pt  <- vars::serial.test(vec_model, lags.pt = 12, type = "PT.asymptotic")
-  serial_bg  <- vars::serial.test(vec_model, lags.bg = 12, type = "BG")
-  arch_res   <- vars::arch.test(vec_model, lags.multi = 12)
+  A_hat <- cbind(
+    vec_model$deterministic,
+    do.call(cbind, vec_model$A)
+  )
+  vec_model_chol$A_hat <- A_hat
+  
+  vec_model_boot <- mb.boot(vec_model_chol, design="fixed", b.length = svars_b_lenght, nboot = 1000, n.ahead = 12, nc = 4, signrest = NULL)
+  
+  # vec_model_boot <- wild.boot(vec_model_chol, design = "fixed", distr = "rademacher",
+  #                             n.ahead = 12, nboot = 1000, nc = 4)
+
+  # summary(vec_model)
+  lags_multi_por_p <- 2 * k_lag  
+  
+  
+  K <- ncol(ts_data_modelo)
+  T_efetivo <- nrow(residuals(vec_model))
+  
+  # regra de viabilidade: pelo menos ~3 observações por parâmetro da regressão auxiliar
+  teto_viavel <- floor(T_efetivo / (3 * K * (K + 1) / 2))
+  
+  lags_multi_por_p <- min(2 * k_lag, teto_viavel)
+  lags_multi_por_p <- max(lags_multi_por_p, 1)  # nunca menos que 1
+  
+  serial_bg <- vars::serial.test(vec_model, lags.bg = lags_multi_por_p, type = "BG")
+  arch_res  <- vars::arch.test(vec_model, lags.multi = lags_multi_por_p, lags.single = lags_multi_por_p, multivariate.only = TRUE)
+  # serial_pt  <- vars::serial.test(vec_model, lags.pt = lags_multi_por_p, type = "PT.asymptotic")
   norm_res   <- vars::normality.test(vec_model)
+  
+  #raízes do VEC
+  # 1. Extrai todas as raízes do VEC restrito
+  roots_vec <- get_vec_roots(vec_model)
+  
+  # 2. Em um VEC(r), as primeiras (K - r) raízes DEVEM ser unitárias (= 1.0)
+  # As raízes ESTÁVEIS são as restantes: das posições (K - r + 1) até o final
+  num_unit_roots <- K - r_rank
+  
+  if (num_unit_roots > 0) {
+    stable_roots <- roots_vec[(num_unit_roots + 1):length(roots_vec)]
+  } else {
+    stable_roots <- roots_vec
+  }
+  
+  # 3. Autovalor Máximo ESTÁVEL (deve ser < 1)
+  valid_roots <- if (length(stable_roots) > 0) max(stable_roots) else NA_real_
+  
+  # O VEC é estável se o autovalor máximo ESTÁVEL for menor que 1 
+  # (ignorando as K-r raízes unitárias teóricas da cointegração)
+  stable <- if (!is.na(valid_roots)) (valid_roots < 1.0) else FALSE
+  
+  
+  # str(var_model_boot)
+  lista_irf <- list()
 
-  var_diag <- vars::VAR(ts_data_modelo, p = p_var, type = "const")
-  roots_var <- vars::roots(var_diag)
-  stable <- all(roots_var < 1)
-  
-  # --- Geração de IRFs (Choque na SELIC) ---
- 
-  grid_irf <- expand.grid(confidence_intervals = c(0.84, 0.90, 0.95),
-                   var_impulse = ordem_vars,
-                   var_response = ordem_vars)
-  
-  vec_irf <- function(var_impulse, var_response, confidence_intervals)
-    {vars::irf(vec_model, 
-                       impulse = var_impulse,
-                       response = var_response,
-                       n.ahead = 12, 
-                       boot = TRUE, 
-                       runs = 1000, 
-                       ci = confidence_intervals, 
-                       ortho = TRUE)}
-  
+  # Loop through each group of variables
+  for (group in variable_groups) {
+    
+    # Extract the variables in the current group
+    var1 <- group[1]
+    var2 <- group[2]
+    var3 <- group[3]
+    var4 <- group[4]
+    
+    irf_plot <- paste0("IRF: ", var1, " - ", var2)
+    
+    irf_label <- paste0("epsilon[ ", var1, " ] %->% ", var2)
 
-  irf_list <- purrr::pmap(grid_irf, vec_irf)
-  
-  names(irf_list) <- paste0("imp___", grid_irf$var_impulse, "___ci___", grid_irf$confidence_intervals)
-  
-  
-
-  df_plot_irf <- purrr::imap_dfr(irf_list, function(irf_obj, name_ci) {
+    mean_irf <- vec_model_boot[["true"]][["irf"]][[irf_label]]
+    boot_irfs <- sapply(vec_model_boot$bootstrap, function(x) x$irf[[irf_label]])
     
-    # Extrair informações do nome
-    parts <- strsplit(name_ci, "___")[[1]]
-    impulse_var <- parts[2]  # O impulso está na segunda posição
-    ci_val <- as.numeric(parts[4])  # O intervalo está na quarta posição
+    # Lower bounds (5%, 10%, 16%)
+    low_05 <- apply(boot_irfs, 1, quantile, probs = 0.05)
+    low_10 <- apply(boot_irfs, 1, quantile, probs = 0.10)
+    low_16 <- apply(boot_irfs, 1, quantile, probs = 0.16)
     
-    vars_resp <- colnames(irf_obj$irf[[1]])
+    # Upper bounds (95%, 90%, 84%)
+    up_95 <- apply(boot_irfs, 1, quantile, probs = 0.95)
+    up_90 <- apply(boot_irfs, 1, quantile, probs = 0.90)
+    up_84 <- apply(boot_irfs, 1, quantile, probs = 0.84)
     
-    purrr::map_dfr(vars_resp, function(v) {
-      data.frame(
-        horizon = 0:12,
-        impulse = impulse_var,
-        variable = v,
-        mean  = irf_obj$irf[[1]][, v],
-        lower = irf_obj$Lower[[1]][, v],
-        upper = irf_obj$Upper[[1]][, v],
-        ci = ci_val             # Adiciona informação do intervalo
+    irf_data <- data.frame(
+      horizon = 1:length(mean_irf),
+      impulse = var1,
+      variable = var2,
+      Mean = mean_irf,
+      Low_05 = low_05,
+      Low_10 = low_10,
+      Low_16 = low_16,
+      Up_95 = up_95,
+      Up_90 = up_90,
+      Up_84 = up_84
+    ) |> 
+      mutate(modalidade = modalidade_selecionada
       )
-    })
-  })
+    
+    resultados <- irf_data 
+    
+    # Store results in lista_irf
+    lista_irf[[paste(group, collapse = ", ")]] <- irf_data
+    }
   
-  df_plot_irf_wide <- df_plot_irf |> 
-    pivot_wider(names_from = ci, values_from = c(mean, lower, upper)) |> 
-    select(-mean_0.84, -mean_0.9) |> 
-    rename(Mean = mean_0.95,
-           Low_05 = lower_0.95,
-           Low_10 = lower_0.9,
-           Low_16 = lower_0.84,
-           Up_95 = upper_0.95,
-           Up_90 = upper_0.9,
-           Up_84 = upper_0.84
-           )
   
-  choque_desejado <- 0.5 
-  sd_selic <- sd(resid(vec_model)[, "resids of SELIC"])
-  fator_escala <- choque_desejado / sd_selic
+  #### IRF DATA####
+  df_irf_completo <- do.call(rbind, lista_irf)
   
-  df_plot_irf_05pts <- df_plot_irf_wide |> 
-    mutate(across(c(Mean, Low_05, Low_10, Low_16, Up_95, Up_90, Up_84), ~ .x* fator_escala))
-
+  #### 2. CALCULAR OS DESVIOS PADRÃO DOS RESÍDUOS ####
+  # Captura os resíduos do modelo para calcular os SDs exatos
+  residuos <- resid(vec_model)
+  choque_desejado <- 0.5
+  
+  sd_selic <- sd(residuos[, "resids of SELIC"], na.rm = TRUE)
+  fator_selic <- choque_desejado / sd_selic
+  
+  impulsos_selecionados <- "SELIC"
+  
+  if (tem_tx_juros) {
+    sd_juros <- sd(residuos[, "resids of TX_JUROS"], na.rm = TRUE)
+    fator_juros <- choque_desejado / sd_juros
+    impulsos_selecionados <- c("SELIC", "TX_JUROS")
+  } else {
+    
+    fator_juros <- 0
+    impulsos_selecionados <- "SELIC"
+    
+  }
+  
+  df_irf_selecionado <- df_irf_completo |> 
+    mutate(across(
+      c(Mean, Low_05, Low_10, Low_16, Up_95, Up_90, Up_84), 
+      ~ case_when(
+        impulse == "SELIC"    ~ .x * fator_selic,
+        impulse == "TX_JUROS" ~ .x * fator_juros,
+        TRUE                  ~ .x
+      )
+    )) |> 
+    filter(impulse %in% impulsos_selecionados)
+  
+  sd_por_variavel <- resid(vec_model) |> 
+    as.data.frame() |> 
+    summarise(across(everything(), sd)) |> 
+    pivot_longer(cols = everything(), names_to = "variavel", values_to = "sd_residuo")
+  
   #### RESIDUAL DATA####
   res_df <- as.data.frame(residuals(vec_model))
   res_df$time <- seq_len(nrow(res_df))  # fallback to numeric index
@@ -238,12 +405,18 @@ VEC_model_function <- function(modalidade_selecionada, fonte_dados, metodo_serie
   
   
   return(list(
-    data_padrao <- tibble::tibble(
-      df_plot_irf_05pts|>  
-        mutate(
-          modalidade = modalidade_selecionada,
-          metodo = metodo_extenso,
-          fonte = fonte_dados)), 
+      df_irf_selecionado <- tibble::tibble(
+        df_irf_selecionado |>  
+          mutate(
+            modalidade = modalidade_selecionada,
+            metodo = metodo_extenso,
+            fonte = fonte_dados)),
+      df_irf_completo <- tibble::tibble(
+        df_irf_completo |>  
+          mutate(
+            modalidade = modalidade_selecionada,
+            metodo = metodo_extenso,
+            fonte = fonte_dados)),
     residual_data <- tibble::tibble(
       res_df|>  
         mutate(
@@ -265,15 +438,16 @@ VEC_model_function <- function(modalidade_selecionada, fonte_dados, metodo_serie
     serial_bg = serial_bg$serial$p.value,
     arch = arch_res$arch.mul$p.value,
     normality = norm_res$jb.mul$p.value,
-    roots = roots_var
-    ))
+    roots = valid_roots,
+    sd_residuos = sd_por_variavel
+  ))
 }
 
 
 
 VEC_model_function_safe <- safely(VEC_model_function)
 
-VEC_resultados <- pmap(grid, VEC_model_function_safe) #CERCA DE 1 HORA
+VEC_resultados <- pmap(grid, VEC_model_function_safe) 
 
 write_rds(VEC_resultados, file = ".\\Output\\VEC_resultados.rds")
 # VEC_resultados <- read_rds(file = ".\\Output\\VEC_resultados.rds")
@@ -281,33 +455,58 @@ write_rds(VEC_resultados, file = ".\\Output\\VEC_resultados.rds")
 outputs <- map(VEC_resultados, "result")
 erros   <- map(VEC_resultados, "error")
 
-df_irf_plots_data_VEC <- bind_rows(lapply(outputs, `[[`, 1))|> mutate(modelo = "VEC")
-df_residuos <- bind_rows(lapply(outputs, `[[`, 2))|> mutate(modelo = "VEC")
-df_data <- bind_rows(lapply(outputs, `[[`, 3))|> mutate(modelo = "VEC")
+df_irf_plots_data_VEC_selecionado <- bind_rows(lapply(outputs, `[[`, 1))|> mutate(modelo = "VEC")
+df_irf_plots_data_VEC_apendice <- bind_rows(lapply(outputs, `[[`, 2))|> mutate(modelo = "VEC")
+df_residuos <- bind_rows(lapply(outputs, `[[`, 3))|> mutate(modelo = "VEC")
+df_data <- bind_rows(lapply(outputs, `[[`, 4))|> mutate(modelo = "VEC")
+
+write_rds(df_irf_plots_data_VEC_selecionado, file = ".\\Output\\df_irf_plots_data_VEC_selecionado.rds")
+write.csv2(df_irf_plots_data_VEC_selecionado, file = ".\\Output\\df_irf_plots_data_VEC_selecionado.csv")
+
+write_rds(df_irf_plots_data_VEC_apendice, file = ".\\Output\\df_irf_plots_data_VEC_apendice.rds")
+write.csv2(df_irf_plots_data_VEC_apendice, file = ".\\Output\\df_irf_plots_data_VEC_apendice.csv")
+
+
+df_sd_residuos <- purrr::map2_dfr(
+  outputs, 
+  seq_along(outputs),
+  ~ if (!is.null(.x)) {
+    .x$sd_residuos |> 
+      mutate(
+        modalidade = grid$modalidade[.y],
+        fonte      = grid$fonte_dados[.y],
+        metodo     = grid$metodo_series[.y]
+      )
+  }
+)
+
+write.csv2(df_sd_residuos, file = ".\\Output\\sd_residuos_VEC.csv")
+
 
 diagnostic <- grid |>
- mutate(
+  mutate(
     # roots e estabilidade
     roots      = map(outputs, ~ .x$roots %||% NA),
     max_root   = map_dbl(outputs, ~ if(!is.null(.x$roots)) max(.x$roots, na.rm = TRUE) else NA_real_),
     stable     = map_lgl(outputs, ~ .x$stable %||% NA),
-
+    
     # rank e lag
     rank       = map_dbl(outputs, ~ .x$rank %||% NA_real_),
     lag        = map_dbl(outputs, ~ .x$lag %||% NA_real_),
-
+    
     # p-values dos testes
-    serial_pt_pvalue = map_dbl(outputs, ~ .x$serial_pt %||% NA_real_),
+    # serial_pt_pvalue = map_dbl(outputs, ~ .x$serial_pt %||% NA_real_),
     serial_bg_pvalue   = map_dbl(outputs, ~ .x$serial_bg %||% NA_real_),
     arch_pvalue        = map_dbl(outputs, ~ .x$arch %||% NA_real_),
     normality_pvalue   = map_dbl(outputs, ~ .x$normality %||% NA_real_)
- )
+  )
 
 
 VEC_export_table <- diagnostic |> 
   mutate(Abordagem = if_else(fonte_dados == "bru", "Estoque", "Contábil")) |> 
   select(modalidade, Abordagem, max_root, rank, lag,arch_pvalue, serial_bg_pvalue) |> 
   mutate(max_root = round(max_root, 3),
+         arch_pvalue =  round(arch_pvalue, 3),
          serial_bg_pvalue = round(serial_bg_pvalue, 3)) |> 
   rename(Modalidade= modalidade,
          "Autovalor Máximo" = max_root,
@@ -317,22 +516,30 @@ VEC_export_table <- diagnostic |>
          "p-valor Breusch-Godfrey LM" = serial_bg_pvalue) 
 VEC_export_table
 
-
+write.csv2(VEC_export_table, file = ".\\Output\\VEC_export_table.csv")
 gt::gtsave(VEC_export_table |> gt::gt(), filename = paste0(".\\Output\\Plots\\chapter_4_1\\VEC_export_table.docx"))
-  
 
 
 
 ordem_variaveis <- c("SELIC", "TX_JUROS", "PIB", "CONCESSOES", "PGTO")
+# ordem_variaveis <- c("TX_JUROS", "PIB", "CONCESSOES", "PGTO", "SELIC") #TESTE A
+# ordem_variaveis <- c("PIB", "CONCESSOES", "PGTO", "SELIC", "TX_JUROS") #TESTE B
 
 # Unir todas IRFs em um único dataframe
-irf_plots_data_VEC <- df_irf_plots_data_VEC|> 
+irf_plots_data_VEC_selecionado <- df_irf_plots_data_VEC_selecionado |> 
   select("horizon", "impulse", "variable", "Mean", "Low_05", "Low_10", "Low_16", "Up_95", "Up_90", "Up_84", "modalidade", "metodo", "fonte" )|> 
   mutate(variable = factor(variable, levels = ordem_variaveis),
          impulse = factor(impulse, levels = ordem_variaveis),
          modelo = "VEC")
 
-write_rds(irf_plots_data_VEC, file = ".\\Output\\irf_plots_data_VEC.rds")
+write_rds(irf_plots_data_VEC_selecionado, file = ".\\Output\\irf_plots_data_VEC_selecionado.rds")
+write.csv2(irf_plots_data_VEC_selecionado, file = ".\\Output\\irf_plots_data_VEC_selecionado.csv")
 
-write.csv2(irf_plots_data_VEC, file = ".\\Output\\irf_plots_data_VEC.csv")
+irf_plots_data_VEC_apendice <- df_irf_plots_data_VEC_apendice |> 
+  select("horizon", "impulse", "variable", "Mean", "Low_05", "Low_10", "Low_16", "Up_95", "Up_90", "Up_84", "modalidade", "metodo", "fonte" )|> 
+  mutate(variable = factor(variable, levels = ordem_variaveis),
+         impulse = factor(impulse, levels = ordem_variaveis),
+         modelo = "VEC")
 
+write_rds(irf_plots_data_VEC_apendice, file = ".\\Output\\irf_plots_data_VEC_apendice.rds")
+write.csv2(irf_plots_data_VEC_apendice, file = ".\\Output\\irf_plots_data_VEC_apendice.csv")

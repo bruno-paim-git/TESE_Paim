@@ -1,15 +1,17 @@
+# OBJETIVO:
+# Fazer o download dos dados brutos do BCB e IBGE
+# Distribuir gastos do cartão de crédito conforme parcelas a fim de encontrar um prazo médio
+# exportar dados parcialmente brutos para serem usados posteriormente
+
+
 ####BIBLIOTECA####
-library(tidyr)
+library(tidyverse)
 library(lubridate)
-library(stringr)
-library(purrr)
 library(httr)
 library(jsonlite)
-library(tidyverse)
 library(vars)
 library(svars)
 library(TTR)
-library(dplyr)
 library(tsibble)
 library(conflicted)
 library(plotly)
@@ -49,6 +51,8 @@ get_bcbdata_base <- function(cod_bcb){
                   id = cod_bcb))}
 
 dir.create("cache_bcb", showWarnings = FALSE)
+dir.create("Output", showWarnings = FALSE)
+
 
 get_bcbdata_cached <- function(cod_bcb, 
                                max_tentativas = 5, 
@@ -154,9 +158,11 @@ readr::write_excel_csv2( bcb_pf_df,
 
 readr::write_rds(bcb_pf_df,
         file = paste0("./Output/bcb_pf_df_",  Sys.Date(), ".rds"))
+
+# PARA CARREGAR ARQUIVOS ANTERIORES
 # date_file = "2026-03-07"
 # bcb_pf_df <- readr::read_rds(file = paste0("./Output/bcb_pf_df_",  date_file, ".rds"))
-# 
+
 
 
 ####DADOS MACRO BCB####
@@ -224,6 +230,7 @@ lista_var_comprometimento <- tibble(COD_BCB = c(29263, 29264, 29265),
 df_BCB_comprometimento <- purrr::map_df(lista_var_comprometimento$COD_BCB, 
                               get_bcbdata_cached)
 
+
 df_BCB_comprometimento <- df_BCB_comprometimento |> 
   rename(COD_BCB = id,
          date = data) |>
@@ -236,7 +243,6 @@ df_BCB_comprometimento <- df_BCB_comprometimento |>
 #####save_the_data####
 readr::write_excel_csv2(df_BCB_comprometimento,
                         file = paste0("./Output/df_BCB_comprometimento_",  Sys.Date(), ".csv"))
-
 
 readr::write_rds(df_BCB_comprometimento,
                  file = paste0("./Output/df_BCB_comprometimento_",  Sys.Date(), ".rds"))
@@ -387,9 +393,10 @@ df <- est_meios_pgto |>
     faixa == "2 e 3 parc" ~ 2.5,
     faixa == "4 a 6 parc" ~ 5,
     # faixa == "7 ou + parc" ~ 7
-    data < "2016-01-01" & faixa == "7 ou + parc" ~ 7, # até 2016-01-01
-    data >= "2016-01-01" & data < "2018-01-01" & faixa == "7 ou + parc" ~ 8, # até 2018-01-01
-    data >= "2018-01-01" & faixa == "7 ou + parc" ~ 9 # de 2018-01-01 em diante
+    data < "2016-01-01" & faixa == "7 ou + parc" ~ 8, # até 2016-01-01
+    data >= "2016-01-01" & data < "2018-01-01" & faixa == "7 ou + parc" ~ 9, # até 2018-01-01
+    data >= "2018-01-01" & data < "2024-01-01" & faixa == "7 ou + parc" ~ 10, # até 2024-01-01
+    data >= "2024-01-01" & faixa == "7 ou + parc" ~ 11 # de 2024-01-01 em diante
   )) |> 
   filter(faixa != "perc_1_parc")
 

@@ -1,4 +1,39 @@
-date_file <- "2026-04-10"
+# OBJETIVO:
+# Realiza os testes de estacionariedade em todas as séries
+# Exporta tabelas resumo com os resultados
+
+#define data do arquivo base
+date_file <- "2026-09-09" 
+{
+  ####BIBLIOTECA####
+  library(tidyverse)
+  library(lubridate)
+  library(httr)
+  library(jsonlite)
+  library(vars)
+  library(svars)
+  library(TTR)
+  library(tsibble)
+  library(conflicted)
+  library(plotly)
+  library(seasonal)
+  library(webshot)
+  library(RCurl)
+  library(slider)
+  library(patchwork)
+  library(tseries)
+  library(urca)
+  
+  options(scipen = 999)
+  
+  conflict_prefer("layout", "plotly")
+  conflict_prefer("select", "dplyr")
+  conflict_prefer("filter", "dplyr")
+  conflict_prefer("lag", "dplyr")
+  
+  source("./function_export_plot.R")
+  
+}
 
 df_data_model <-  readr::read_rds(file = paste0("./Output/df_data_model_",  date_file, ".rds")) |> 
   select("date", "modalidade_agregada", 
@@ -24,9 +59,15 @@ test_unit_root <- function(x, diff_level = 0) {
   x <- na.omit(x)
   
   if(length(x) < 15) return(NULL)
-  
   # Escolha da especificação
-  type_adf <- if(diff_level == 0) "trend" else "drift"
+  
+  type_adf <- dplyr::case_when(
+    diff_level == 0 ~ "trend",
+    diff_level == 1 ~ "drift",
+    TRUE            ~ "none"   # 2ª diferença em diante: sem deriva/tendência
+  )
+  
+  # type_adf <- if(diff_level == 0) "trend" else "drift"
   
   # ADF (com seleção de lag por AIC)
   adf_obj <- ur.df(x, type = type_adf, selectlags = "AIC")
@@ -102,7 +143,9 @@ resultado_testes <- df_data_model %>%
       setdiff(variaveis, "TX_JUROS")
     }
     
-    purrr::map_df(variaveis, function(var) {
+    
+    #purrr::map_df(vars, function(var) {
+    purrr::map_df(vars_validas, function(var) {
       
       serie_raw <- df_mod[[var]]
       
@@ -116,7 +159,9 @@ resultado_testes <- df_data_model %>%
       }
       
       
-      serie <- log(serie_raw)
+      # serie <- log(serie_raw)
+      ja_log <- startsWith(var, "sa_log_")
+      serie <- if (ja_log) serie_raw else log(serie_raw)
       
       res <- get_stationarity_full(serie)
       
@@ -166,6 +211,6 @@ tabela_final_adf_pp <- bind_rows(resultado_adf_pp_geral,resultado_adf_pp_modalid
     TRUE ~ variavel
   )) 
 
-
+tabela_final_adf_pp
 
 gt::gtsave(tabela_final_adf_pp |> gt::gt(), filename = paste0(".\\Output\\Plots\\chapter_4_1\\tabela_final_adf_pp.docx"))

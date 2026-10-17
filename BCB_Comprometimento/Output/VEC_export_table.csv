@@ -1,0 +1,17 @@
+"";"Modalidade";"Abordagem";"Autovalor Máximo";"Posto";"Lag";"p-valor ARCH";"p-valor Breusch-Godfrey LM"
+"1";"Aquisição de bens";"Estoque";0,834;2;2;0;0
+"2";"Aquisição de bens";"Contábil";0,792;1;2;0;0
+"3";"CC parcelado sem juros";"Estoque";0,959;2;4;0;0,008
+"4";"CC parcelado sem juros";"Contábil";0,959;2;4;0,018;0,153
+"5";"CC parcelado";"Estoque";0,927;4;2;0;0
+"6";"CC parcelado";"Contábil";0,969;3;4;0;0,097
+"7";"CC rotativo";"Estoque";0,85;1;2;0;0
+"8";"CC rotativo";"Contábil";0,944;1;4;0;0,02
+"9";"Cheque especial";"Estoque";0,928;2;7;0;0,029
+"10";"Cheque especial";"Contábil";0,907;2;6;0,089;0,058
+"11";"Consignado";"Estoque";NA;NA;NA;NA;NA
+"12";"Consignado";"Contábil";0,839;1;2;0;0
+"13";"Crédito pessoal não consignado";"Estoque";0,946;3;5;0;0,072
+"14";"Crédito pessoal não consignado";"Contábil";0,951;2;5;0;0,226
+"15";"Imobiliário";"Estoque";0,987;2;3;0,001;0,001
+"16";"Imobiliário";"Contábil";0,958;2;4;0,006;0,056

@@ -8,7 +8,7 @@ process_model_df <- function(df_model) {
   df_model |>
     mutate(
       #serviço da dívida
-      dsw_y = ((r+i)*Lw)/(w*Y),                                     
+      ds_w = ((r+i)*lag(Lw))/(W),                                     
       #consumo em relação ao estoque de capital
       cw_k= Cw/lag(K),
       cr_k= Cr/lag(K),
@@ -19,17 +19,19 @@ process_model_df <- function(df_model) {
       #nível de consumo
       log_Cw = log(Cw),
       #dívida em relação ao estoque de capital
-      lw= Lw/K,
+      l_k= Lw/K,
+      l_y = Lw/Y,
       #nível da renda
       log_y = log(Y),
       log_ydw = log(Ydw),
       gY = Y/lag(Y) -1,
+      # gZ = Zw/lag(Zw) -1,
       #patrimônio Líquido
       Vw_y = Vw/Y,
       Vr_y = Vr/Y,
       # SAVr_Y = SAVr/Y,
-      Zw_y = Zw/Y,
-      d = Bw/Lw,
+      # Zw_y = Zw/Y,
+      # d = Bw/lag(Lw),
       #estabilidade keynesiana
       # est_key = if ( (1- cr_v*ro_v*pi_v -cw_v*w_v) > h_v) {1} else {0}
     )|> 
@@ -53,8 +55,8 @@ df_plot$modelo <- factor(df_plot$modelo, levels = list_modelos)
   
   labels_modelos <- c(
     "BUCCHIANICO_2024_a_BASELINE"   = "Base",
-    "BUCCHIANICO_2024_b_schock_i"    = "Choque na taxa de juros (i)",
-    "BUCCHIANICO_2024_c_schock_phi0" = "Choque no componente autônomo (φ0)"
+    "BUCCHIANICO_2024_b_shock_i"    = "Choque na taxa de juros (i)",
+    "BUCCHIANICO_2024_c_shock_phi0" = bquote("Choque no componente autônomo  ("*phi[0]*")")
   )
   
 plot_simulation_bucchianico <-ggplot(df_plot, aes(x = period, y = value)) +
@@ -89,7 +91,8 @@ plot_simulation_bucchianico <-ggplot(df_plot, aes(x = period, y = value)) +
         list_modelos
       ),
       labels = labels_modelos
-    ) +
+    )+
+  # scale_x_continuous(n.breaks = 10)+
     
   scale_color_manual(
     values = setNames(
@@ -111,7 +114,7 @@ ggsave(filename = file.path("Output", paste0("plot_simulation_bucchianico", ".sv
 
 ####gera gráfico com as veriáveis ("log_y","dsw_y", "cw_k", "lw")####
 
-vars <- c("log_y","dsw_y", "cw_k", "lw")
+vars <- c("log_y","ds_w", "cw_k", "l_k")
 
 df_plot <-
   df_scenario1_TOTAL %>% 

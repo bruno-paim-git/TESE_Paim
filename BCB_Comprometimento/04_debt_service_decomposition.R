@@ -1,4 +1,39 @@
-date_file <- "2026-04-10" 
+# OBJETIVO:
+# Demonstra o serviço da dívida por modalidade, seguindo metodologia própria
+# exportar gráficos sobre a evolução do serviço da dívida por modalidade seguindo a abordagem do Estoque
+
+#define data do arquivo base
+date_file <- "2026-09-09" 
+{
+  ####BIBLIOTECA####
+  library(tidyverse)
+  library(lubridate)
+  library(httr)
+  library(jsonlite)
+  library(vars)
+  library(svars)
+  library(TTR)
+  library(tsibble)
+  library(conflicted)
+  library(plotly)
+  library(seasonal)
+  library(webshot)
+  library(RCurl)
+  library(slider)
+  library(patchwork)
+  library(tseries)
+  library(urca)
+  
+  options(scipen = 999)
+  
+  conflict_prefer("layout", "plotly")
+  conflict_prefer("select", "dplyr")
+  conflict_prefer("filter", "dplyr")
+  conflict_prefer("lag", "dplyr")
+  
+  source("./function_export_plot.R")
+  
+}
 
 df_empilhado <- readr::read_rds(file = paste0("./Output/df_empilhado_", date_file, ".rds"))
 dados_macro <-  readr::read_rds(file = paste0("./Output/dados_macro_",  date_file, ".rds"))
@@ -78,18 +113,20 @@ for (modalidade_selecionada in modalidade_modelo) {
     as_tsibble(index = date) |>  # <- Define 'date' como índice corretamente
     dplyr::select(-modalidade_agregada) %>%
     ungroup() |> 
-    mutate(amort_liq = CONCESSOES-AMORTIZACAO) |> 
-    #cria variáveis com a taxa de crescimento
+    mutate(AMORT_LIQ = CONCESSOES-AMORTIZACAO) |> 
+    #cria variáveis com média móvel
     mutate(mm_3m_FLUXO_FINANCEIRO = rollmean(FLUXO_FINANCEIRO, k = 3, fill = NA, align = "right"),
            mm_3m_AMORTIZACAO = rollmean(AMORTIZACAO, k = 3, fill = NA, align = "right"),
            mm_3m_JUROS = rollmean(JUROS, k = 3, fill = NA, align = "right"),
-           mm_3m_PMT = rollmean(PMT, k = 3, fill = NA, align = "right")) |> 
-    #cria variáveis de impulso 
-    mutate(impulso_pmt = -(rollmean(PMT, k = 3, fill = NA, align = "right") - lag(rollmean(PMT, k = 3, fill = NA, align = "right"), 12)),
-           impulso_con = rollmean(CONCESSOES, k = 3, fill = NA, align = "right") - lag(rollmean(CONCESSOES, k = 3, fill = NA, align = "right"), 12),
-           impulso_amort = rollmean(amort_liq, k = 3, fill = NA, align = "right") - lag(rollmean(amort_liq, k = 3, fill = NA, align = "right"), 12),
-           impulso_juros = -(rollmean(JUROS, k = 3, fill = NA, align = "right") - lag(rollmean(JUROS, k = 3, fill = NA, align = "right"), 12)),
-           impulso = rollmean(FLUXO_FINANCEIRO, k = 3, fill = NA, align = "right") - lag(rollmean(FLUXO_FINANCEIRO, k = 3, fill = NA, align = "right"), 12)) |> 
+           mm_3m_PMT = rollmean(PMT, k = 3, fill = NA, align = "right"),
+           mm_3m_CONCESSOES = rollmean(CONCESSOES, k = 3, fill = NA, align = "right"),
+           mm_3m_AMORT_LIQ = rollmean(AMORT_LIQ, k = 3, fill = NA, align = "right")) |> 
+    #cria variáveis de impulso a partir da média móvel
+    mutate(impulso_pmt = -mm_3m_PMT - lag(mm_3m_PMT, 12),
+           impulso_con = mm_3m_CONCESSOES - lag(mm_3m_CONCESSOES, 12),
+           impulso_amort = mm_3m_AMORT_LIQ - lag(mm_3m_AMORT_LIQ, 12),
+           impulso_juros = -mm_3m_JUROS - lag(mm_3m_JUROS, 12),
+           impulso = mm_3m_FLUXO_FINANCEIRO - lag(mm_3m_FLUXO_FINANCEIRO, 12)) |> 
     #SEM AJUSTE
     mutate(comprometimento_total = (mm_3m_PMT/RNDBF)*100,
            comprometimento_amortizacao = (mm_3m_AMORTIZACAO/RNDBF)*100,
@@ -168,7 +205,7 @@ plot_ly(
   textposition = "inside"
 ) %>%
   layout(
-    title = "Participação no do total da PMT por modalidade - Brasil - 2013-2024",
+    title = "Participação no do total da PMT por modalidade - Brasil - 2013-2025",
     xaxis = list(title = "Data", tickformat = "%b %Y"), # Formata data no eixo X
     yaxis = list(title = "% PMT", tickformat = ".0%"), # Mostra eixo Y em porcentagem
     barmode = "stack",
@@ -180,7 +217,7 @@ plot_ly(
 ggplot(comp_modalidade_total |> filter(date >= "2013-03-01"), 
        aes(x = date, y = comprometimento_total_saz, fill = origem)) +
   geom_col(position = "stack", width = 400) +  # Aumente o width para preencher o espaço
-  labs(title = "Comprometimento da Renda por modalidade - Brasil - 2013-2024",
+  labs(title = "Comprometimento da Renda por modalidade - Brasil - 2013-2025",
        x = "Data",
        y = "% da RNDBF",
        fill = "Origem") +
@@ -239,7 +276,7 @@ plot_ly(
   textposition = "inside"
 ) %>%
   layout(
-    title = "Comprometimento da Renda por modalidade - Brasil - 2013-2024",
+    title = "Comprometimento da Renda por modalidade - Brasil - 2013-2025",
     xaxis = list(title = "Data", tickformat = "%b %Y"), # Formata data no eixo X
     yaxis = list(title = "% da RNDBF", tickformat = "0.0 %"), # Mostra eixo Y em porcentagem
     barmode = "stack",
@@ -248,7 +285,7 @@ plot_ly(
 
 #####SCATTER#####
 
-####plot_perfil_2013_2024####
+####plot_perfil_2013_2025####
 
 df_filtrado <- comp_modalidade_total |> 
   filter(date == "2013-12-01" | date == "2025-12-01") |> 

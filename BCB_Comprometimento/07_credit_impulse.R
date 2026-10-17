@@ -1,17 +1,50 @@
-date_file <- "2026-04-10" 
+# OBJETIVO:
+# Consolida-se o cálculo de serviço da dívida seguindo as duas abordagens: Estoque e Contábil
+# Calcula-se o Impulso de Crédito, dado pela variação interanual da média trimestral
+# do Fluxo Financeiro (concessões líquidas), resultado da diferença entre as Concessões e o PMT.
+# Exporta os gráficos comparativos entre as abordagens
+
+#Os valores são deflacionados a preços recentes
+
+#define data do arquivo base
+date_file <- "2026-09-09" 
+{
+  ####BIBLIOTECA####
+  library(tidyverse)
+  library(lubridate)
+  library(httr)
+  library(jsonlite)
+  library(vars)
+  library(svars)
+  library(TTR)
+  library(tsibble)
+  library(conflicted)
+  library(plotly)
+  library(seasonal)
+  library(webshot)
+  library(RCurl)
+  library(slider)
+  library(patchwork)
+  library(tseries)
+  library(urca)
+  
+  options(scipen = 999)
+  
+  conflict_prefer("layout", "plotly")
+  conflict_prefer("select", "dplyr")
+  conflict_prefer("filter", "dplyr")
+  conflict_prefer("lag", "dplyr")
+  
+  source("./function_export_plot.R")
+
+}
+
 
 df_empilhado <- readr::read_rds(file = paste0("./Output/df_empilhado_", date_file, ".rds"))
 dados_macro <-  readr::read_rds(file = paste0("./Output/dados_macro_",  date_file, ".rds")) |> 
   select(-IBCBR, -RNDBF_ajustado, -SELIC, -PIB_acum12m)
 
 chapter_section <- "chapter_3_2\\"
-
-#É necessário rodar todo o arquivo Calculo_comprometiment_tese antes
-
-#Abaixo calcula-se o Impulo de Crédito, dado pela variação interanual da média trimestral
-#do Fluxo Financeiro (concessões líquidas), resultado da diferença entre as Concessões e o PMT.
-
-#Os valores são deflacionados a preços recentes
 
 comp_modalidade_def <- list()
 
@@ -59,6 +92,7 @@ cores_modalidades <- c(
 
 df_fluxo_financeiro <- df_empilhado |>
   arrange(modalidade, date) |>
+  group_by(modalidade) |> 
   filter(date >= "2013-01-01") |>
   mutate(JUROS = coalesce(JUROS, 0),
          AMORTIZACAO = coalesce(AMORTIZACAO, 0),
@@ -76,6 +110,7 @@ df_fluxo_financeiro <- df_empilhado |>
          ff_bcb = concessoes_bcb + pgto_bcb,
          ff_bru = concessoes_bru + pgto_bru,
   ) |> 
+  ungroup() |> 
   rename(concessoes_orig = concessoes) |> 
   select(date, modalidade, saldo_bcb, JUROS, AMORTIZACAO, concessoes_bcb, concessoes_bru, concessoes_orig, pgto_bcb, pgto_bru, ff_bcb, ff_bru)
 
@@ -212,6 +247,7 @@ comp_modalidade_total_soma_def <- comp_modalidade_total_def %>%
 fonte_dados = c("bru", "bcb")
 
 #####TOTAL####
+{
 fonte_dados <- "bru"
 plot_fluxo_financeiro_total_estoque <- ggplot(comp_modalidade_total_soma_def |> 
                                         filter(date >= "2014-01-01"), aes(x = date)) +
@@ -219,6 +255,7 @@ plot_fluxo_financeiro_total_estoque <- ggplot(comp_modalidade_total_soma_def |>
   geom_line(aes(y = -(.data[[paste0("total_pgto_", fonte_dados)]]), color = "Pagamentos"), linewidth = 1) +
   geom_line(aes(y = .data[[paste0("total_concessoes_", fonte_dados)]], color = "Concessões"), linewidth = 1) +
   scale_x_date(date_labels = "%Y",breaks = "2 years") +  # Formato do eixo X
+  scale_y_continuous(labels = scales::label_comma(big.mark = ".", decimal.mark = ","))+
   scale_color_manual(
     values = c("Concessões" = "darkgreen",
                "Pagamentos" = "darkorange", 
@@ -233,7 +270,7 @@ plot_fluxo_financeiro_total_estoque <- ggplot(comp_modalidade_total_soma_def |>
   labs(
     title = "Abordagem de Estoque",
     x = "Data",
-    y = "Pagamentos, Concessões e Fluxo Financeiro (R$)",
+    y = "Pagamentos, Concessões \n e Fluxo Financeiro (R$ milhões)",
     color = "Legenda") +  # Nome da legenda
   theme_minimal() + 
   theme(
@@ -249,16 +286,18 @@ plot_fluxo_financeiro_total_estoque <- ggplot(comp_modalidade_total_soma_def |>
     panel.grid.major.y = element_line(color = "grey90"),
     plot.title = element_text(hjust = 0.5)
   )
+}
 plot_fluxo_financeiro_total_estoque
 
+{
 fonte_dados <- "bcb"
-
 plot_fluxo_financeiro_total_contabil <- ggplot(comp_modalidade_total_soma_def |> 
                                                 filter(date >= "2014-01-01"), aes(x = date)) +
   geom_bar(aes(y = .data[[paste0("total_ff_", fonte_dados)]], fill = "Fluxo Financeiro"), stat = "identity",alpha = 0.5) +
   geom_line(aes(y = -(.data[[paste0("total_pgto_", fonte_dados)]]), color = "Pagamentos"), linewidth = 1) +
   geom_line(aes(y = .data[[paste0("total_concessoes_", fonte_dados)]], color = "Concessões"), linewidth = 1) +
   scale_x_date(date_labels = "%Y",breaks = "2 years") +  # Formato do eixo X
+  scale_y_continuous(labels = scales::label_comma(big.mark = ".", decimal.mark = ","))+
   scale_color_manual(
     values = c("Concessões" = "darkgreen",
                "Pagamentos" = "darkorange", 
@@ -273,7 +312,7 @@ plot_fluxo_financeiro_total_contabil <- ggplot(comp_modalidade_total_soma_def |>
   labs(
     title = "Abordagem Contábil",
     x = "Data",
-    y = "Pagamentos, Concessões e Fluxo Financeiro (R$)",
+    y = "Pagamentos, Concessões \n e Fluxo Financeiro (R$)",
     color = "Legenda") +  # Nome da legenda
   theme_minimal() + 
   theme(
@@ -289,6 +328,7 @@ plot_fluxo_financeiro_total_contabil <- ggplot(comp_modalidade_total_soma_def |>
     panel.grid.major.y = element_line(color = "grey90"),
     plot.title = element_text(hjust = 0.5)
   )
+}
 
 plot_fluxo_financeiro_total_contabil
 
@@ -377,7 +417,7 @@ plot_impulso_credito_total_contabil <- ggplot() +
                      labels = c("Total" = "Impulso Total de Crédito")) +  # Define cor da linha total
   labs(    title = "Abordagem Contábil",
            x = "Data",
-       y = "Impulso de Crédito (R$)",
+       y = "Impulso de Crédito (R$ milhões)",
        fill = "",
        color = "") +
   theme_minimal(base_size = 12) + 
@@ -433,7 +473,7 @@ plot_impulso_credito_total_estoque <- ggplot() +
                      labels = c("Total" = "Impulso Total de Crédito")) +  # Define cor da linha total
   labs(    title = "Abordagem de Estoque",
            x = "Data",
-           y = "Impulso de Crédito (R$)",
+           y = "Impulso de Crédito (R$ milhões)",
            fill = "",
            color = "") +
   theme_minimal(base_size = 12) + 
@@ -467,7 +507,9 @@ p2 <- plot_impulso_credito_total_estoque +
 plot_final_impulso_credito <- (p1 | p2) + 
   plot_layout(guides = "collect") & 
   theme(legend.position = "bottom")
+
 plot_final_impulso_credito
+
 ggsave(
   filename = paste0(".\\Output\\Plots\\", chapter_section, "plot_final_impulso_credito.svg"),
   plot = plot_final_impulso_credito, width = 16, height = 6, dpi = 1000)
@@ -513,7 +555,7 @@ plot_impulso_modalidades_contabil <- ggplot() +
   
   labs(  title = "Abordagem Contábil",
          x = "Data",
-       y = "Impulso de Crédito (R$)",
+       y = "Impulso de Crédito (R$ milhões)",
        fill = "",
        color = "") +
   theme_minimal(base_size = 12) + 
@@ -579,8 +621,8 @@ plot_impulso_modalidades_estoque <- ggplot() +
   
   labs(  title = "Abordagem de Estoque",
          x = "Data",
-       y = "Impulso de Crédito (R$)",
-       fill = "",
+         y = "Impulso de Crédito (R$ milhões)",
+         fill = "",
        color = "") +
   theme_minimal(base_size = 12) + 
   theme(
@@ -843,7 +885,7 @@ plot_impulso_pib12m_estoque <- ggplot() +
 # Visualizar
 plot_impulso_pib12m_estoque
 
-limites_y <- c(-3.5, + 3.5)
+limites_y <- c(-4, + 3)
 
 # Lado a lado:
 p1 <- plot_impulso_pib12m_contabil + 
@@ -868,9 +910,9 @@ ggsave(
 
 ####IMPULSO PLOTLY####
 ######IMPULSO EM %PIB - 3m####
+{
 fonte_dados <- "bcb" 
 
-######IMPULSO EM %PIB - 3m####
 plot_impulso_pib3m_contabil <- plot_ly() %>%
   # Adiciona as barras empilhadas por origem
   add_bars(
@@ -897,10 +939,16 @@ plot_impulso_pib3m_contabil <- plot_ly() %>%
     legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.2, font = list(size = 18)),
     barmode = "relative" # Barras empilhadas
   )
-
-
+}
 plot_impulso_pib3m_contabil
 
+exportar_plotly_png(plot_impulso_pib3m_contabil, 
+                    file = paste0(".\\Output\\Plots\\", chapter_section, "plot_impulso_pib3m_contabil.png"), 
+                    width = 1600, 
+                    height = 800)
+
+
+{
 fonte_dados <- "bru" 
 plot_impulso_pib3m_estoque <- plot_ly() %>%
   # Adiciona as barras empilhadas por origem
@@ -929,9 +977,18 @@ plot_impulso_pib3m_estoque <- plot_ly() %>%
     barmode = "relative" # Barras empilhadas
   )
 
+}
+plot_impulso_pib3m_estoque
 
-######IMPULSO EM %PIB - 3m####
-plot_impulso_pib12m <- plot_ly() %>%
+exportar_plotly_png(plot_impulso_pib3m_estoque, 
+                    file = paste0(".\\Output\\Plots\\", chapter_section, "plot_impulso_pib3m_estoque.png"), 
+                    width = 1600, 
+                    height = 800)
+
+
+######IMPULSO EM %PIB - 12m####
+{fonte_dados <- "bru" 
+plot_impulso_pib12m_estoque <- plot_ly() %>%
   # Adiciona as barras empilhadas por origem
   add_bars(
     data = comp_modalidade_total_def |> filter(date >= "2015-01-01"),
@@ -957,15 +1014,141 @@ plot_impulso_pib12m <- plot_ly() %>%
     legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.2, font = list(size = 18)),
     barmode = "relative" # Barras empilhadas
   )
+}
+
+  plot_impulso_pib12m_estoque
+
+  exportar_plotly_png(plot_impulso_pib12m_estoque, 
+                      file = paste0(".\\Output\\Plots\\", chapter_section, "plot_impulso_pib12m_estoque.png"), 
+                      width = 1600, 
+                      height = 800)
+
+{fonte_dados <- "bcb" 
+  plot_impulso_pib12m_contabil <- plot_ly() %>%
+    # Adiciona as barras empilhadas por origem
+    add_bars(
+      data = comp_modalidade_total_def |> filter(date >= "2015-01-01"),
+      x = ~date,
+      y = ~(.data[[paste0("impulso_PIB_12m_", fonte_dados)]])*100,
+      color = ~origem,
+      colors = cores_modalidades,
+      text = ~paste0(round((.data[[paste0("impulso_PIB_12m_", fonte_dados)]]), 1)), # Adiciona rótulos de porcentagem
+      textposition = "inside"
+    ) %>%
+    # Adiciona a linha da soma total
+    add_lines(
+      data = comp_modalidade_total_soma_def |> filter(date >= "2015-01-01"),
+      x = ~date,
+      y = ~(.data[[paste0("total_impulso_PIB_12m_", fonte_dados)]])*100,
+      name = "Total", # Nome da linha na legenda
+      line = list(color = "black", width = 2, dash = "solid") # Estiliza a linha
+    ) %>%
+    layout(
+      title = list(text = ""), 
+      xaxis = list(title = list(text = "Data",  font = list(size = 20)), tickformat = "%b\n%Y", showgrid = TRUE), 
+      yaxis = list(title = list(text = "% PIB", font = list(size = 20))), # Ajusta para começar do zero
+      legend = list(orientation = "h", x = 0.5, xanchor = "center", y = -0.2, font = list(size = 18)),
+      barmode = "relative" # Barras empilhadas
+    )
+}
+
+plot_impulso_pib12m_contabil
+
+exportar_plotly_png(plot_impulso_pib12m_contabil, 
+                    file = paste0(".\\Output\\Plots\\", chapter_section, "plot_impulso_pib12m_contabil.png"), 
+                    width = 1600, 
+                    height = 800)
 
 
-plot_impulso_pib12m
 
-# 1. Salvar o gráfico como HTML temporário
-htmlwidgets::saveWidget(plot_impulso_pib12m, "temp_plot.html")
 
-# 2. Capturar imagem a partir do HTML
-webshot("temp_plot.html", file = paste0(".\\Output\\Plots\\", chapter_section, "plot_impulso_pib12m.png"), vwidth = 1600, vheight = 800)
+dados_macro <-  readr::read_rds(file = paste0("./Output/dados_macro_",  date_file, ".rds")) |> 
+  select(-IBCBR, -RNDBF_ajustado, -SELIC)
+
+
+ff_bcb_rpm <- readxl::read_xlsx(".\\Input\\rpm202606anp.xlsx", sheet = "Graf 1.2.30", skip = 8) |>
+  select(`Mês`, `Pessoas físicas`) |> 
+  rename(date = `Mês`,
+         ff_bcb_rpm = `Pessoas físicas`) |> 
+  mutate(date = as.Date(date))
+
+ff_pib <- df_fluxo_financeiro |> 
+  select(date, ff_bcb, ff_bru) |> 
+  group_by(date) |> 
+  summarise(ff_bcb = sum(ff_bcb, na.rm = TRUE),
+            ff_bru = sum(ff_bru, na.rm = TRUE)) |> 
+  mutate(ff_bcb_acum_12 = rollsum(ff_bcb, k = 12, fill = NA, align = "right"),
+         ff_bru_acum_12 = rollsum(ff_bru, k = 12, fill = NA, align = "right")) |> 
+  drop_na() |> 
+  left_join(dados_macro) |> 
+  mutate(ff_bcb_pib = (ff_bcb_acum_12/PIB_acum12m)*100,
+         ff_bru_pib = (ff_bru_acum_12/PIB_acum12m)*100) |> 
+  select(date, ff_bcb_pib, ff_bru_pib) |> 
+  filter(date >= "2014-01-01") |>
+  left_join(ff_bcb_rpm) |> 
+  pivot_longer(cols = c(ff_bcb_pib, ff_bru_pib, ff_bcb_rpm))
+
+
+plot_ff_pib12m <- ggplot() +
+  # 🔵 Barras
+  geom_line(
+    data = ff_pib |> 
+      filter(name == "ff_bcb_pib"),
+    aes(x = date, y = value, color = "Abordagem Contábil"), linewidth = 0.8
+  ) +
+  # 🔵 Barras
+  geom_line(
+    data = ff_pib |> 
+      filter(name == "ff_bru_pib"),
+    aes(x = date, y = value, color = "Abordagem Estoque"), linewidth = 0.8
+  )   +
+  # 🔵 Barras
+  geom_line(
+    data = ff_pib |> 
+      filter(name == "ff_bcb_rpm"),
+    aes(x = date, y = value, color = "BCB (Relatório de Política Monetária)"), linewidth = 0.8
+  )   +
+  
+  geom_hline(yintercept = 0) +
+  scale_x_date(date_labels = "%b\n%Y", date_breaks = "2 year", expand = c(0,0)) +  # Remove espaços extras
+  scale_y_continuous(
+    breaks = function(limits) seq(floor(limits[1]), ceiling(limits[2]), by = 1)
+  )+
+  scale_color_manual(
+    values = c("Abordagem Contábil" = "blue3",
+               "Abordagem Estoque" = "red4",
+               "BCB (Relatório de Política Monetária)" = "red"),  # Ordem desejada
+    breaks = c("Abordagem Contábil","Abordagem Estoque","BCB (Relatório de Política Monetária)")  # Define ordem na legenda
+  ) +
+  scale_fill_manual(values = "darkgray") +
+  labs(x = "Data",
+       y = "% PIB",
+       color = "Legenda") +  # Nome da legenda
+  theme_minimal(base_size = 12) + 
+  theme(
+    text = element_text(size = 18),       # aumenta todas as fontes
+    axis.title = element_text(size = 18), # títulos dos eixos
+    axis.text = element_text(size = 16),  # valores dos eixos
+    legend.text = element_text(size = 20),
+    panel.grid.minor = element_blank(),                    # remove grades menores
+    panel.grid.major.x = element_line(color = "grey90"),   # mantém apenas a grade principal em x
+    panel.grid.major.y = element_line(color = "grey90"),  
+    panel.background = element_rect(fill = "white", color = "white"),  # Fundo branco no painel
+    plot.background = element_rect(fill = "white", color = "white"),  # Fundo branco no gráfico
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    plot.margin = margin(10, 30, 10, 10) # Aumentei a margem direita (30)
+  )
+
+plot_ff_pib12m
+
+ggsave(
+  filename = paste0(".\\Output\\Plots\\", chapter_section, "plot_ff_pib12m.svg"),
+  plot = plot_ff_pib12m, width = 16, height = 6, dpi = 1000)
+
+
+readr::write_excel_csv2(ff_pib,
+                        file = paste0("./Output/ff_pib.csv"))
 
 
 
